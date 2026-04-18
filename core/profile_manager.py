@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
 PROFILES_DIR = os.path.join(DATA_DIR, "profiles")
 ACTIVE_FILE = os.path.join(DATA_DIR, "active.json")
-LEGACY_FILE = os.path.join(DATA_DIR, "profiles.json")  # stary format – migracja
+LEGACY_FILE = os.path.join(DATA_DIR, "profiles.json")
 
 
 def _safe_filename(name: str) -> str:
@@ -44,7 +44,6 @@ class Profile:
     color: str = "#7c3aed"
     description: str = ""
     actions: list[dict] = field(default_factory=list)
-    notifications_enabled: bool = True
 
     def get_actions(self) -> list[Action]:
         result = []
@@ -62,18 +61,21 @@ class Profile:
             "color": self.color,
             "description": self.description,
             "actions": self.actions,
-            "notifications_enabled": self.notifications_enabled,
         }
 
     @classmethod
     def from_dict(cls, data: dict) -> "Profile":
+        # Odfiltruj przestarzałe akcje (power_plan, kill_process)
+        actions = [
+            a for a in data.get("actions", [])
+            if a.get("type") not in {"set_power_plan", "kill_process"}
+        ]
         return cls(
             name=data.get("name", "Bez nazwy"),
             icon=data.get("icon", "🖥️"),
             color=data.get("color", "#7c3aed"),
             description=data.get("description", ""),
-            actions=data.get("actions", []),
-            notifications_enabled=data.get("notifications_enabled", True),
+            actions=actions,
         )
 
 
@@ -82,7 +84,6 @@ class ProfileManager(QObject):
 
     profileChanged = Signal(str)
     profilesUpdated = Signal()
-    blockedAppDetected = Signal(str, str)  # process_name, profile_name
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -90,7 +91,7 @@ class ProfileManager(QObject):
         self.active_profile: Optional[Profile] = None
         self._previous_state: dict = {}
         self._blocked_processes: list[str] = []
-        self.manual_override: bool = False  # ▶ clicked by user → scheduler skips
+        self.manual_override: bool = False
         self.load()
 
     # ─── Zapis / Odczyt ─────────────────────────────────────────
@@ -103,7 +104,6 @@ class ProfileManager(QObject):
             self._migrate_legacy()
             return
 
-        # Wczytaj wszystkie pliki z katalogu profiles/
         self.profiles = []
         for filename in sorted(os.listdir(PROFILES_DIR)):
             if not filename.endswith(".json"):
@@ -119,7 +119,6 @@ class ProfileManager(QObject):
             self._create_defaults()
             self._save_all_files()
 
-        # Wczytaj aktywny profil
         active_name = self._load_active_name()
         if active_name:
             self.active_profile = self.get_profile(active_name)
@@ -161,18 +160,15 @@ class ProfileManager(QObject):
             logger.error(f"Błąd usuwania pliku profilu '{name}': {e}")
 
     def _save_all_files(self):
-        """Zapisz wszystkie profile (używane przy inicjalizacji)."""
         os.makedirs(PROFILES_DIR, exist_ok=True)
         for profile in self.profiles:
             self._write_profile_file(profile)
         self._save_active()
 
     def save(self):
-        """Alias zachowany dla kompatybilności – zapisuje aktywny profil."""
         self._save_active()
 
     def _migrate_legacy(self):
-        """Przeprowadź migrację z profiles.json do osobnych plików."""
         logger.info("Migracja profiles.json → data/profiles/...")
         try:
             with open(LEGACY_FILE, "r", encoding="utf-8") as f:
@@ -187,7 +183,6 @@ class ProfileManager(QObject):
                 self.active_profile = self.get_profile(active_name)
                 self._save_active()
 
-            # Zmień nazwę starego pliku na backup
             os.rename(LEGACY_FILE, LEGACY_FILE + ".bak")
             logger.info(f"Migracja zakończona. Backup: {LEGACY_FILE}.bak")
         except Exception as e:
@@ -206,10 +201,8 @@ class ProfileManager(QObject):
     def update_profile(self, old_name: str, updated: Profile) -> bool:
         for i, p in enumerate(self.profiles):
             if p.name == old_name:
-                # Jeśli zmieniono nazwę – usuń stary plik
                 if old_name != updated.name:
                     self._delete_profile_file(old_name)
-                    # Zaktualizuj referencję do aktywnego profilu
                     if self.active_profile and self.active_profile.name == old_name:
                         self.active_profile = updated
                 self.profiles[i] = updated
@@ -244,7 +237,6 @@ class ProfileManager(QObject):
                     color=p.color,
                     description=p.description,
                     actions=copy.deepcopy(p.actions),
-                    notifications_enabled=p.notifications_enabled,
                 )
                 self.add_profile(new_profile)
                 return new_profile
@@ -263,7 +255,6 @@ class ProfileManager(QObject):
             "volume": SystemController.get_volume(),
             "wallpaper": SystemController.get_wallpaper(),
             "dark_theme": SystemController.get_theme(),
-            "power_plan_guid": SystemController.get_active_power_plan(),
         }
 
     def switch_profile(self, profile_name: str, manual: bool = False) -> bool:
@@ -310,8 +301,6 @@ class ProfileManager(QObject):
                 SystemController.set_wallpaper(state["wallpaper"])
             if "dark_theme" in state:
                 SystemController.set_theme(state["dark_theme"])
-            if "power_plan_guid" in state and state["power_plan_guid"]:
-                SystemController.set_power_plan(state["power_plan_guid"])
 
         self.active_profile = None
         self._previous_state = {}
@@ -327,24 +316,14 @@ class ProfileManager(QObject):
         return list(self._blocked_processes)
 
     def enforce_blocks(self):
-        """Zamknij zablokowane procesy; emituje sygnał gdy coś zostało zamknięte."""
-        try:
-            import psutil
-        except ImportError:
+        """Zamknij zablokowane procesy gdy ponownie się uruchomią."""
+        if not self._blocked_processes:
             return
-
-        profile_name = self.active_profile.name if self.active_profile else ""
         for proc_name in self._blocked_processes:
-            killed_any = False
-            for proc in psutil.process_iter(['name']):
-                try:
-                    if proc.info['name'] and proc.info['name'].lower() == proc_name.lower():
-                        proc.kill()
-                        killed_any = True
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    pass
-            if killed_any:
-                self.blockedAppDetected.emit(proc_name, profile_name)
+            try:
+                SystemController.close_process(proc_name)
+            except Exception as e:
+                logger.error(f"Błąd egzekwowania blokady {proc_name}: {e}")
 
     # ─── Profile domyślne ────────────────────────────────────────
 

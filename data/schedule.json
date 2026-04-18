@@ -1,13 +1,3 @@
 {
-  "blocks": [
-    {
-      "day": 4,
-      "start_hour": 14,
-      "start_min": 30,
-      "end_hour": 19,
-      "end_min": 0,
-      "profile_name": "Praca",
-      "enabled": true
-    }
-  ]
+  "blocks": []
 }

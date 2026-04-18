@@ -1,11 +1,11 @@
 """
 MainWindow – główne okno aplikacji Context Switcher Pro.
 
-Zawiera karty profili, monitor przebodźcowania i harmonogram.
+Zawiera karty profili i harmonogram.
 """
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QFont, QIcon, QAction
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QScrollArea, QFrame, QTabWidget,
@@ -15,12 +15,9 @@ from PySide6.QtWidgets import (
 
 from core.profile_manager import ProfileManager, Profile
 from core.scheduler import Scheduler
-from core.overload_monitor import OverloadMonitor
 from gui.profile_card import ProfileCard
 from gui.profile_editor import ProfileEditorDialog
 from gui.schedule_widget import WeeklyCalendarWidget
-from gui.overload_widget import OverloadWidget
-from gui.blocked_dialog import BlockedAppNotification
 
 
 class MainWindow(QMainWindow):
@@ -32,30 +29,23 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(900, 700)
         self.resize(1050, 780)
 
-        # ── Inicjalizacja komponentów ──
         self.profile_manager = ProfileManager()
         self.scheduler = Scheduler()
-        self.monitor = OverloadMonitor()
 
-        # Połączenia sygnałów
         self.profile_manager.profileChanged.connect(self._on_profile_changed)
         self.profile_manager.profilesUpdated.connect(self._refresh_profiles)
-        self.profile_manager.blockedAppDetected.connect(self._on_blocked_app)
         self.scheduler.scheduleTriggered.connect(self._on_schedule_trigger)
-        self._active_block_notification: BlockedAppNotification | None = None
+        self.scheduler.scheduleEnded.connect(self._on_schedule_end)
 
-        # Timer blokady procesów (co 5s)
+        # Timer egzekwowania blokad (co 5s)
         self._block_timer = QTimer(self)
         self._block_timer.setInterval(5000)
         self._block_timer.timeout.connect(self.profile_manager.enforce_blocks)
 
-        # ── Budowa UI ──
         self._setup_ui()
         self._setup_tray()
 
-        # Uruchomienie
         self.scheduler.start()
-        self.monitor.start()
         self._block_timer.start()
 
     def _setup_ui(self):
@@ -71,7 +61,6 @@ class MainWindow(QMainWindow):
         header = self._build_header()
         main_layout.addLayout(header)
 
-        # ── Separator ──
         sep = QFrame()
         sep.setObjectName("separator")
         sep.setFrameShape(QFrame.Shape.HLine)
@@ -86,7 +75,6 @@ class MainWindow(QMainWindow):
         profiles_layout = QVBoxLayout(profiles_tab)
         profiles_layout.setContentsMargins(0, 16, 0, 0)
 
-        # Kontener kart profili
         self.cards_scroll = QScrollArea()
         self.cards_scroll.setWidgetResizable(True)
         self.cards_scroll.setHorizontalScrollBarPolicy(
@@ -102,10 +90,6 @@ class MainWindow(QMainWindow):
 
         self.cards_scroll.setWidget(self.cards_container)
         profiles_layout.addWidget(self.cards_scroll)
-
-        # Monitor przebodźcowania (na dole)
-        self.overload_widget = OverloadWidget(self.monitor)
-        profiles_layout.addWidget(self.overload_widget)
 
         self.tabs.addTab(profiles_tab, "🖥️ Profile")
 
@@ -127,17 +111,13 @@ class MainWindow(QMainWindow):
         self.tabs.currentChanged.connect(self._on_tab_changed)
         main_layout.addWidget(self.tabs, 1)
 
-        # ── Pasek statusu ──
         self._build_status_bar()
-
-        # Odśwież karty
         self._refresh_profiles()
 
     def _build_header(self) -> QHBoxLayout:
         header = QHBoxLayout()
         header.setSpacing(12)
 
-        # Logo / Tytuł
         title_col = QVBoxLayout()
         title_col.setSpacing(2)
 
@@ -145,14 +125,13 @@ class MainWindow(QMainWindow):
         title.setObjectName("titleLabel")
         title_col.addWidget(title)
 
-        subtitle = QLabel("Samo-enforsujący się planer dnia – kontroluj swoje środowisko i przebodźcowanie")
+        subtitle = QLabel("Samo-enforsujący się planer dnia – kontroluj swoje środowisko")
         subtitle.setObjectName("subtitleLabel")
         title_col.addWidget(subtitle)
 
         header.addLayout(title_col)
         header.addStretch()
 
-        # Aktywny profil badge
         self.active_badge = QLabel("Brak aktywnego profilu")
         self.active_badge.setStyleSheet("""
             QLabel {
@@ -174,7 +153,6 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 16, 0, 0)
         layout.setSpacing(16)
 
-        # Info o aplikacji
         info_frame = QFrame()
         info_frame.setObjectName("cardFrame")
         info_layout = QVBoxLayout(info_frame)
@@ -187,59 +165,15 @@ class MainWindow(QMainWindow):
             "Context Switcher Pro to samo-enforsujący się planer dnia.\n"
             "Jednym kliknięciem przełącz swoje środowisko między trybami pracy.\n\n"
             "Funkcje:\n"
-            "• Zarządzanie profilami (uruchamianie/zamykanie app, głośność, tapeta, motyw, plan zasilania)\n"
-            "• Automatyczne przełączanie wg harmonogramu\n"
-            "• Monitor przebodźcowania – śledzi co robisz i jak bardzo to Cię stymuluje\n"
-            "• Blokowanie rozpraszaczy – wyłącz komunikatory i social media\n\n"
-            "Motywacja: Ludzie są przebodźcowani. Chcemy kontrolować\n"
-            "przebodźcowanie za pomocą profili i monitoringu aktywności."
+            "• Zarządzanie profilami (głośność, tapeta, motyw, uruchamianie/zamykanie aplikacji)\n"
+            "• Automatyczne przełączanie wg harmonogramu tygodniowego\n"
+            "• Blokowanie rozpraszaczy – wybrane aplikacje będą zamykane gdy profil aktywny"
         )
         info_text.setWordWrap(True)
         info_text.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.5;")
         info_layout.addWidget(info_text)
 
         layout.addWidget(info_frame)
-
-        # Sterowania monitorem
-        monitor_frame = QFrame()
-        monitor_frame.setObjectName("cardFrame")
-        monitor_layout = QVBoxLayout(monitor_frame)
-
-        monitor_title = QLabel("🧠 Ustawienia monitora")
-        monitor_title.setObjectName("sectionTitle")
-        monitor_layout.addWidget(monitor_title)
-
-        # Pokaż korekty
-        overrides = self.monitor.get_overrides()
-        if overrides:
-            for proc, score in overrides.items():
-                row = QHBoxLayout()
-                lbl = QLabel(f"{proc}: {score}/10")
-                lbl.setStyleSheet("color: #94a3b8;")
-                row.addWidget(lbl)
-
-                remove_btn = QPushButton("Usuń korektę")
-                remove_btn.setStyleSheet("""
-                    QPushButton {
-                        background: transparent; color: #ef4444;
-                        border: 1px solid #ef4444; border-radius: 4px;
-                        padding: 4px 8px; font-size: 11px;
-                    }
-                    QPushButton:hover { background: rgba(239,68,68,0.1); }
-                """)
-                proc_name = proc
-                remove_btn.clicked.connect(
-                    lambda checked, p=proc_name: self._remove_override(p)
-                )
-                row.addWidget(remove_btn)
-                row.addStretch()
-                monitor_layout.addLayout(row)
-        else:
-            no_overrides = QLabel("Brak ręcznych korekt – analiza w pełni automatyczna.")
-            no_overrides.setStyleSheet("color: #64748b; font-style: italic;")
-            monitor_layout.addWidget(no_overrides)
-
-        layout.addWidget(monitor_frame)
         layout.addStretch()
 
         return tab
@@ -257,14 +191,13 @@ class MainWindow(QMainWindow):
         """)
         status_bar.showMessage("Gotowy – Context Switcher Pro v1.0")
 
-    # ─── System Tray ──────────────────────────────────────────────
+    # ─── System Tray (bez powiadomień push) ───────────────────────
 
     def _setup_tray(self):
-        """Skonfiguruj ikonę w zasobniku systemowym."""
+        """Tray tylko do szybkiego przełączania profili i wywołania okna."""
         self.tray_icon = QSystemTrayIcon(self)
         self.tray_icon.setToolTip("Context Switcher Pro")
 
-        # Menu zasobnika
         tray_menu = QMenu()
 
         show_action = QAction("Pokaż okno", self)
@@ -273,19 +206,18 @@ class MainWindow(QMainWindow):
 
         tray_menu.addSeparator()
 
-        # Profile w tray menu
         for profile in self.profile_manager.profiles:
             action = QAction(f"{profile.icon} {profile.name}", self)
             name = profile.name
             action.triggered.connect(
-                lambda checked, n=name: self.profile_manager.switch_profile(n)
+                lambda checked, n=name: self.profile_manager.switch_profile(n, manual=True)
             )
             tray_menu.addAction(action)
 
         tray_menu.addSeparator()
 
         deactivate_action = QAction("⏹ Dezaktywuj profil", self)
-        deactivate_action.triggered.connect(self.profile_manager.deactivate_profile)
+        deactivate_action.triggered.connect(self._manual_deactivate)
         tray_menu.addAction(deactivate_action)
 
         tray_menu.addSeparator()
@@ -307,14 +239,11 @@ class MainWindow(QMainWindow):
     # ─── Odświeżanie profili ──────────────────────────────────────
 
     def _refresh_profiles(self):
-        """Przebuduj karty profili."""
-        # Wyczyść
         while self.cards_layout.count():
             item = self.cards_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
 
-        # Dodaj karty
         active_name = (
             self.profile_manager.active_profile.name
             if self.profile_manager.active_profile else None
@@ -335,7 +264,6 @@ class MainWindow(QMainWindow):
             card.duplicateClicked.connect(self._on_card_duplicate)
             self.cards_layout.addWidget(card)
 
-        # Przycisk dodawania
         add_btn = QPushButton("  ➕  Nowy profil")
         add_btn.setObjectName("profileAddButton")
         add_btn.setFixedHeight(52)
@@ -345,7 +273,6 @@ class MainWindow(QMainWindow):
 
         self.cards_layout.addStretch()
 
-        # Zaktualizuj harmonogram
         if hasattr(self, 'schedule_widget'):
             profile_names = [p.name for p in self.profile_manager.profiles]
             colors = {p.name: p.color for p in self.profile_manager.profiles}
@@ -355,12 +282,17 @@ class MainWindow(QMainWindow):
     # ─── Handlery kart ────────────────────────────────────────────
 
     def _on_card_switch(self, name: str):
-        """Przełącz lub dezaktywuj profil (ręczne – nadpisuje harmonogram)."""
+        """Ręczna aktywacja/dezaktywacja profilu – nadpisuje harmonogram."""
         if (self.profile_manager.active_profile
                 and self.profile_manager.active_profile.name == name):
-            self.profile_manager.deactivate_profile()
+            self._manual_deactivate()
         else:
             self.profile_manager.switch_profile(name, manual=True)
+
+    def _manual_deactivate(self):
+        """Dezaktywacja ręczna – poinformuj harmonogram aby nie wznawiał bloku."""
+        self.scheduler.notify_manual_deactivation()
+        self.profile_manager.deactivate_profile()
 
     def _on_card_edit(self, name: str):
         profile = self.profile_manager.get_profile(name)
@@ -381,10 +313,7 @@ class MainWindow(QMainWindow):
         )
         if reply == QMessageBox.StandardButton.Yes:
             self.profile_manager.delete_profile(name)
-            self.scheduler.blocks = [
-                b for b in self.scheduler.blocks if b.profile_name != name
-            ]
-            self.scheduler.save()
+            self.scheduler.clear_blocks_for_profile(name)
 
     def _on_card_duplicate(self, name: str):
         self.profile_manager.duplicate_profile(name)
@@ -405,7 +334,6 @@ class MainWindow(QMainWindow):
     # ─── Sygnały ──────────────────────────────────────────────────
 
     def _on_profile_changed(self, name: str):
-        """Reakcja na zmianę profilu."""
         if name:
             profile = self.profile_manager.get_profile(name)
             if profile:
@@ -424,15 +352,6 @@ class MainWindow(QMainWindow):
                 self.statusBar().showMessage(
                     f"Przełączono na profil: {profile.icon} {profile.name}"
                 )
-                # Powiadomienie systemowe
-                if (profile.notifications_enabled
-                        and self.tray_icon.isSystemTrayAvailable()):
-                    self.tray_icon.showMessage(
-                        "Context Switcher Pro",
-                        f"Aktywny profil: {profile.icon} {profile.name}",
-                        QSystemTrayIcon.MessageIcon.Information,
-                        3000,
-                    )
         else:
             self.active_badge.setText("Brak aktywnego profilu")
             self.active_badge.setStyleSheet("""
@@ -454,37 +373,17 @@ class MainWindow(QMainWindow):
             self.schedule_widget.scroll_to_now()
 
     def _on_schedule_trigger(self, profile_name: str):
-        """Harmonogram wywołał przełączenie – ignoruj jeśli profil włączony ręcznie."""
-        if not self.profile_manager.manual_override:
-            self.profile_manager.switch_profile(profile_name)
-
-    def _on_blocked_app(self, proc_name: str, profile_name: str):
-        """Pokaż powiadomienie gdy zablokowana aplikacja zostaje zawieszona."""
-        profile = self.profile_manager.get_profile(profile_name)
-        if profile and not profile.notifications_enabled:
+        """Harmonogram rozpoczął blok – aktywuj profil (jeśli nie ma ręcznego override)."""
+        if self.profile_manager.manual_override:
             return
-        # Nie pokazuj jeśli poprzednie powiadomienie jest wciąż widoczne
-        if self._active_block_notification and self._active_block_notification.isVisible():
-            return
-        # Znajdź przyjazną nazwę aplikacji
-        display_name = proc_name
-        for _, pn, dn in getattr(self, "_last_block_rows", []):
-            if pn.lower() == proc_name.lower():
-                display_name = dn
-                break
-        # Szukaj też w akcjach profilu
-        if profile:
-            for a in profile.actions:
-                if (a.get("type") == "block_process"
-                        and a.get("process_name", "").lower() == proc_name.lower()):
-                    display_name = a.get("display_name", proc_name) or proc_name
-                    break
-        if self._active_block_notification:
-            self._active_block_notification.hide()
-        self._active_block_notification = BlockedAppNotification(display_name, profile_name)
+        self.profile_manager.switch_profile(profile_name, manual=False)
 
-    def _remove_override(self, process_name: str):
-        self.monitor.remove_override(process_name)
+    def _on_schedule_end(self, _unused: str):
+        """Harmonogram zakończył blok – dezaktywuj profil jeśli wciąż nasz."""
+        if self.profile_manager.manual_override:
+            return
+        if self.profile_manager.active_profile:
+            self.profile_manager.deactivate_profile()
 
     # ─── Zamykanie ────────────────────────────────────────────────
 
@@ -492,10 +391,3 @@ class MainWindow(QMainWindow):
         """Minimalizuj do zasobnika zamiast zamykania."""
         event.ignore()
         self.hide()
-        if self.tray_icon.isSystemTrayAvailable():
-            self.tray_icon.showMessage(
-                "Context Switcher Pro",
-                "Aplikacja działa w tle. Kliknij dwukrotnie ikonę w zasobniku.",
-                QSystemTrayIcon.MessageIcon.Information,
-                2000,
-            )

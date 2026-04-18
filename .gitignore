@@ -1,3 +1,9 @@
 hacknarok_venv/
-*/__pycache__/
 data/
+
+# Python cache
+**/__pycache__/
+core/__pycache__/
+gui/__pycache__/
+*.py[cod]
+*$py.class

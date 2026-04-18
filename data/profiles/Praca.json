@@ -2,16 +2,20 @@
   "name": "Praca",
   "icon": "🏢",
   "color": "#3b82f6",
-  "description": "Skup się na pracy – wyłącz rozpraszacze, ciemny motyw, niska głośność.",
+  "description": "",
   "actions": [
     {
-      "type": "set_volume",
-      "level": 30
+      "level": 7,
+      "type": "set_volume"
     },
     {
-      "type": "set_theme",
-      "dark": true
+      "dark": true,
+      "type": "set_theme"
+    },
+    {
+      "display_name": "Spotify",
+      "process_name": "Spotify.exe",
+      "type": "block_process"
     }
-  ],
-  "notifications_enabled": true
+  ]
 }

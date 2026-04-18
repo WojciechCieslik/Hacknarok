@@ -4,10 +4,9 @@ Actions – klasy akcji profilu.
 Każda akcja implementuje execute() i undo(), oraz serializację do/z JSON.
 """
 
-import json
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Optional
 
 from core.system_controller import SystemController
 
@@ -59,10 +58,9 @@ class LaunchAppAction(Action):
         return SystemController.launch_app(self.path, self.args)
 
     def undo(self) -> bool:
-        # Próbuj zabić proces po nazwie pliku
         import os
         proc_name = os.path.basename(self.path)
-        return SystemController.kill_process(proc_name)
+        return SystemController.close_process(proc_name) > 0
 
     def to_dict(self) -> dict:
         return {
@@ -82,35 +80,6 @@ class LaunchAppAction(Action):
 
     def get_description(self) -> str:
         return f"🚀 Uruchom: {self.label or self.path}"
-
-
-class KillProcessAction(Action):
-    """Zakończ proces."""
-
-    action_type = "kill_process"
-
-    def __init__(self, process_name: str):
-        self.process_name = process_name
-
-    def execute(self) -> bool:
-        return SystemController.kill_process(self.process_name)
-
-    def undo(self) -> bool:
-        # Nie można cofnąć zabicia procesu
-        return True
-
-    def to_dict(self) -> dict:
-        return {
-            "type": self.action_type,
-            "process_name": self.process_name,
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict) -> "KillProcessAction":
-        return cls(process_name=data["process_name"])
-
-    def get_description(self) -> str:
-        return f"💀 Zakończ: {self.process_name}"
 
 
 class SetVolumeAction(Action):
@@ -212,42 +181,8 @@ class SetThemeAction(Action):
         return f"🌙 Motyw: {mode}"
 
 
-class SetPowerPlanAction(Action):
-    """Zmień plan zasilania."""
-
-    action_type = "set_power_plan"
-
-    def __init__(self, guid: str, name: str = ""):
-        self.guid = guid
-        self.name = name
-        self._previous_guid: Optional[str] = None
-
-    def execute(self) -> bool:
-        self._previous_guid = SystemController.get_active_power_plan()
-        return SystemController.set_power_plan(self.guid)
-
-    def undo(self) -> bool:
-        if self._previous_guid:
-            return SystemController.set_power_plan(self._previous_guid)
-        return True
-
-    def to_dict(self) -> dict:
-        return {
-            "type": self.action_type,
-            "guid": self.guid,
-            "name": self.name,
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict) -> "SetPowerPlanAction":
-        return cls(guid=data["guid"], name=data.get("name", ""))
-
-    def get_description(self) -> str:
-        return f"⚡ Plan zasilania: {self.name or self.guid[:8]}"
-
-
 class BlockProcessAction(Action):
-    """Blokuj proces – zamyka go natychmiast i przy każdej próbie uruchomienia."""
+    """Blokuj proces – zamyka go normalnie przy aktywacji i przy każdej próbie uruchomienia."""
 
     action_type = "block_process"
 
@@ -257,15 +192,14 @@ class BlockProcessAction(Action):
 
     def execute(self) -> bool:
         """Zamknij proces jeśli działa – blokada aktywna od teraz."""
-        killed = SystemController.kill_process(self.process_name)
-        if killed:
+        closed = SystemController.close_process(self.process_name)
+        if closed:
             logger.info(f"Zablokowano i zamknięto: {self.process_name}")
         else:
             logger.info(f"Blokada aktywna dla: {self.process_name} (proces nie był uruchomiony)")
         return True
 
     def undo(self) -> bool:
-        # Nie można cofnąć zamknięcia procesu – blokada jest zdejmowana przez ProfileManager
         return True
 
     def to_dict(self) -> dict:
@@ -291,11 +225,9 @@ class BlockProcessAction(Action):
 
 ACTION_REGISTRY: dict[str, type[Action]] = {
     "launch_app": LaunchAppAction,
-    "kill_process": KillProcessAction,
     "set_volume": SetVolumeAction,
     "set_wallpaper": SetWallpaperAction,
     "set_theme": SetThemeAction,
-    "set_power_plan": SetPowerPlanAction,
     "block_process": BlockProcessAction,
 }
 
@@ -305,5 +237,6 @@ def action_from_dict(data: dict) -> Action:
     action_type = data.get("type", "")
     cls = ACTION_REGISTRY.get(action_type)
     if cls is None:
+        # Ignoruj nieznane akcje (np. deprecated set_power_plan, kill_process)
         raise ValueError(f"Nieznany typ akcji: {action_type}")
     return cls.from_dict(data)

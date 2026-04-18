@@ -2,16 +2,16 @@
 SystemController – wrapper na Windows API.
 
 Hermetyzuje wszystkie wywołania systemowe:
-głośność, tapeta, motyw, plan zasilania, procesy, aktywne okno.
+głośność (winmm), tapeta, motyw, procesy, aktywne okno.
 """
 
 import ctypes
 import os
 import subprocess
-import sys
 import winreg
 import logging
-from typing import Optional, Tuple, List, Set
+from ctypes import wintypes
+from typing import Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -19,55 +19,41 @@ logger = logging.getLogger(__name__)
 class SystemController:
     """Kontroler systemowy – enkapsuluje wywołania Windows API."""
 
-    # ─── Głośność ───────────────────────────────────────────────
-
-    # Skrypt pycaw uruchamiany w osobnym procesie – segfault izolowany od głównej apki
-    _PYCAW_GET = (
-        "from pycaw.pycaw import AudioUtilities,IAudioEndpointVolume;"
-        "from comtypes import CLSCTX_ALL;from ctypes import cast,POINTER;"
-        "d=AudioUtilities.GetSpeakers();"
-        "i=d.Activate(IAudioEndpointVolume._iid_,CLSCTX_ALL,None);"
-        "v=cast(i,POINTER(IAudioEndpointVolume));"
-        "print(int(round(v.GetMasterVolumeLevelScalar()*100)))"
-    )
-    _PYCAW_SET = (
-        "import sys;from pycaw.pycaw import AudioUtilities,IAudioEndpointVolume;"
-        "from comtypes import CLSCTX_ALL;from ctypes import cast,POINTER;"
-        "d=AudioUtilities.GetSpeakers();"
-        "i=d.Activate(IAudioEndpointVolume._iid_,CLSCTX_ALL,None);"
-        "v=cast(i,POINTER(IAudioEndpointVolume));"
-        "v.SetMasterVolumeLevelScalar(float(sys.argv[1]),None)"
-    )
+    # ─── Głośność (winmm – waveOutSetVolume / waveOutGetVolume) ─
 
     @staticmethod
     def get_volume() -> int:
         """Pobierz aktualny poziom głośności (0-100)."""
         try:
-            result = subprocess.run(
-                [sys.executable, "-c", SystemController._PYCAW_GET],
-                capture_output=True, text=True, timeout=4,
-                creationflags=subprocess.CREATE_NO_WINDOW,
-            )
-            if result.returncode == 0 and result.stdout.strip():
-                return int(result.stdout.strip())
+            dword = wintypes.DWORD()
+            # 0 = pierwsze urządzenie wyjściowe
+            winmm = ctypes.WinDLL("winmm", use_last_error=True)
+            rc = winmm.waveOutGetVolume(0, ctypes.byref(dword))
+            if rc != 0:
+                logger.error(f"waveOutGetVolume rc={rc}")
+                return 50
+            # dolne 16 bitów = lewy, górne 16 bitów = prawy; uśrednij
+            left = dword.value & 0xFFFF
+            right = (dword.value >> 16) & 0xFFFF
+            avg = (left + right) // 2
+            return int(round(avg / 0xFFFF * 100))
         except Exception as e:
             logger.error(f"Nie udało się pobrać głośności: {e}")
-        return 50
+            return 50
 
     @staticmethod
     def set_volume(level: int) -> bool:
         """Ustaw głośność systemową (0-100)."""
         try:
             level = max(0, min(100, level))
-            result = subprocess.run(
-                [sys.executable, "-c", SystemController._PYCAW_SET, str(level / 100.0)],
-                capture_output=True, text=True, timeout=4,
-                creationflags=subprocess.CREATE_NO_WINDOW,
-            )
-            if result.returncode == 0:
+            scalar = int(round(level / 100.0 * 0xFFFF))
+            packed = (scalar << 16) | scalar  # obie strony (L+R)
+            winmm = ctypes.WinDLL("winmm", use_last_error=True)
+            rc = winmm.waveOutSetVolume(0, packed)
+            if rc == 0:
                 logger.info(f"Głośność ustawiona na {level}%")
                 return True
-            logger.error(f"pycaw subprocess błąd: {result.stderr.strip()}")
+            logger.error(f"waveOutSetVolume rc={rc}")
         except Exception as e:
             logger.error(f"Nie udało się ustawić głośności: {e}")
         return False
@@ -140,87 +126,6 @@ class SystemController:
             logger.error(f"Nie udało się zmienić motywu: {e}")
             return False
 
-    # ─── Plan zasilania ─────────────────────────────────────────
-
-    @staticmethod
-    def _run_cmd(args: list[str]) -> str:
-        """Uruchom polecenie i zwróć stdout jako str (obsługa polskiego OEM cp1250)."""
-        result = subprocess.run(
-            args,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            creationflags=subprocess.CREATE_NO_WINDOW,
-        )
-        if not result.stdout:
-            return ""
-        for enc in ("cp1250", "utf-8", "cp852", "ascii"):
-            try:
-                return result.stdout.decode(enc)
-            except UnicodeDecodeError:
-                continue
-        return result.stdout.decode("ascii", errors="replace")
-
-    _cached_power_plans: Optional[List[dict]] = None
-
-    @staticmethod
-    def get_power_plans(force_refresh: bool = False) -> list[dict]:
-        """Pobierz listę dostępnych planów zasilania."""
-        if SystemController._cached_power_plans is not None and not force_refresh:
-            return SystemController._cached_power_plans
-        try:
-            output = SystemController._run_cmd(["powercfg", "/list"])
-            plans = []
-            for line in output.splitlines():
-                if "GUID" in line:
-                    # Format: "GUID planu zasilania: <guid>  (nazwa) *"
-                    parts = line.split(":")
-                    if len(parts) >= 2:
-                        rest = parts[1].strip()
-                        guid = rest.split()[0] if rest.split() else ""
-                        # Wyciągnij nazwę z nawiasów
-                        name_start = line.find("(")
-                        name_end = line.find(")")
-                        name = line[name_start + 1:name_end] if name_start != -1 and name_end != -1 else guid
-                        is_active = "*" in line
-                        plans.append({
-                            "guid": guid,
-                            "name": name,
-                            "active": is_active
-                        })
-            SystemController._cached_power_plans = plans
-            return plans
-        except Exception as e:
-            logger.error(f"Nie udało się pobrać planów zasilania: {e}")
-            return SystemController._cached_power_plans or []
-
-    @staticmethod
-    def get_active_power_plan() -> Optional[str]:
-        """Pobierz GUID aktywnego planu zasilania."""
-        plans = SystemController.get_power_plans()
-        for plan in plans:
-            if plan["active"]:
-                return plan["guid"]
-        return None
-
-    @staticmethod
-    def set_power_plan(guid: str) -> bool:
-        """Ustaw plan zasilania wg GUID."""
-        try:
-            result = subprocess.run(
-                ["powercfg", "/setactive", guid],
-                capture_output=True, text=True,
-                creationflags=subprocess.CREATE_NO_WINDOW
-            )
-            if result.returncode == 0:
-                logger.info(f"Plan zasilania zmieniony na: {guid}")
-                return True
-            else:
-                logger.error(f"Błąd powercfg: {result.stderr}")
-                return False
-        except Exception as e:
-            logger.error(f"Nie udało się zmienić planu zasilania: {e}")
-            return False
-
     # ─── Procesy / Aplikacje ────────────────────────────────────
 
     @staticmethod
@@ -239,36 +144,89 @@ class SystemController:
             return False
 
     @staticmethod
-    def kill_processes(process_names: List[str]) -> int:
-        """Zabij wszystkie procesy z podanej listy nazw (grupowo w 1 pass)."""
-        if not process_names:
-            return 0
+    def _close_windows_for_pid(pid: int) -> bool:
+        """Wyślij WM_CLOSE do wszystkich widocznych okien procesu. Zwraca czy coś zamknięto."""
         try:
-            import psutil
-            killed = 0
-            # Szybsze wyszukiwanie: zbiór z małymi literami
-            target_names = {name.lower().replace(".exe", "") for name in process_names}
-            for proc in psutil.process_iter(['name']):
+            import win32gui
+            import win32process
+            import win32con
+
+            closed = False
+
+            def _enum(hwnd, _):
+                nonlocal closed
                 try:
-                    p_name = proc.info.get('name')
-                    if p_name:
-                        p_name_lower = p_name.lower().replace(".exe", "")
-                        if p_name_lower in target_names or p_name.lower() in target_names:
-                            proc.terminate()
-                            killed += 1
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    _, owner_pid = win32process.GetWindowThreadProcessId(hwnd)
+                    if owner_pid == pid and win32gui.IsWindowVisible(hwnd):
+                        win32gui.PostMessage(hwnd, win32con.WM_CLOSE, 0, 0)
+                        closed = True
+                except Exception:
                     pass
-            if killed > 0:
-                logger.info(f"Grupowo zakończono {killed} proces(ów) z listy {len(process_names)}")
-            return killed
-        except Exception as e:
-            logger.error(f"Nie udało się zakończyć procesów grupowo: {e}")
-            return 0
+
+            win32gui.EnumWindows(_enum, None)
+            return closed
+        except Exception:
+            return False
 
     @staticmethod
-    def kill_process(process_name: str) -> bool:
-        """Zabij wszystkie procesy o danej nazwie."""
-        return SystemController.kill_processes([process_name]) > 0
+    def close_process(process_name: str) -> int:
+        """
+        Zakończ proces w normalny sposób:
+        1. najpierw WM_CLOSE do okien (graceful),
+        2. potem proc.terminate() (SIGTERM-like),
+        3. na końcu kill() jako fallback.
+        Zwraca liczbę zakończonych procesów.
+        """
+        try:
+            import psutil
+        except ImportError:
+            return 0
+
+        closed = 0
+        targets: list = []
+        for proc in psutil.process_iter(['name', 'pid']):
+            try:
+                if (proc.info['name']
+                        and proc.info['name'].lower() == process_name.lower()):
+                    targets.append(proc)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+
+        if not targets:
+            return 0
+
+        # 1. Graceful – WM_CLOSE
+        for proc in targets:
+            try:
+                SystemController._close_windows_for_pid(proc.pid)
+            except Exception:
+                pass
+
+        # 2. Daj chwilę na zamknięcie i sprawdź czy zakończony
+        gone, alive = psutil.wait_procs(targets, timeout=1.5)
+        closed += len(gone)
+
+        # 3. Pozostałym wyślij terminate (normal)
+        for proc in alive:
+            try:
+                proc.terminate()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+
+        if alive:
+            gone2, still_alive = psutil.wait_procs(alive, timeout=1.0)
+            closed += len(gone2)
+            # 4. Fallback: kill
+            for proc in still_alive:
+                try:
+                    proc.kill()
+                    closed += 1
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+
+        if closed:
+            logger.info(f"Zamknięto {closed} proces(ów) '{process_name}'")
+        return closed
 
     @staticmethod
     def get_running_processes() -> list[str]:
@@ -327,44 +285,6 @@ class SystemController:
         except Exception as e:
             logger.error(f"Nie udało się pobrać listy aplikacji: {e}")
             return []
-
-    @staticmethod
-    def suspend_process(process_name: str) -> bool:
-        """Zawieś (zamroź) wszystkie procesy o danej nazwie."""
-        try:
-            import psutil
-            suspended = 0
-            for proc in psutil.process_iter(['name']):
-                try:
-                    if proc.info['name'] and proc.info['name'].lower() == process_name.lower():
-                        proc.suspend()
-                        suspended += 1
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    pass
-            logger.info(f"Zawieszono {suspended} proces(ów) '{process_name}'")
-            return suspended > 0
-        except Exception as e:
-            logger.error(f"Nie udało się zawiesić procesu {process_name}: {e}")
-            return False
-
-    @staticmethod
-    def resume_process(process_name: str) -> bool:
-        """Wznów zawieszone procesy o danej nazwie."""
-        try:
-            import psutil
-            resumed = 0
-            for proc in psutil.process_iter(['name']):
-                try:
-                    if proc.info['name'] and proc.info['name'].lower() == process_name.lower():
-                        proc.resume()
-                        resumed += 1
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    pass
-            logger.info(f"Wznowiono {resumed} proces(ów) '{process_name}'")
-            return resumed > 0
-        except Exception as e:
-            logger.error(f"Nie udało się wznowić procesu {process_name}: {e}")
-            return False
 
     # ─── Aktywne okno ───────────────────────────────────────────
 

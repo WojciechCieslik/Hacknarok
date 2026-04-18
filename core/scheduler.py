@@ -1,7 +1,10 @@
 """
 Scheduler – harmonogram automatycznego przełączania profili.
 
-Bloki czasowe (ScheduleBlock) zastąpiły trigger-based ScheduleEntry.
+Każdy blok działa raz: aktywacja gdy czas wchodzi w przedział,
+dezaktywacja gdy czas z niego wychodzi. Jeśli użytkownik przerwie
+profil ręcznie w trakcie bloku, blok nie uruchomi się ponownie
+(aż do następnego bloku).
 """
 
 import json
@@ -70,45 +73,84 @@ class ScheduleBlock:
     def end_str(self) -> str:
         return f"{self.end_hour:02d}:{self.end_min:02d}"
 
+    def _key(self) -> str:
+        return f"{self.day}-{self.start_hour}-{self.start_min}-{self.end_hour}-{self.end_min}-{self.profile_name}"
+
 
 class Scheduler(QObject):
+    # Emitowany raz, gdy blok się rozpoczyna (aktywuj profil)
     scheduleTriggered = Signal(str)
+    # Emitowany raz, gdy blok się kończy (dezaktywuj profil)
+    scheduleEnded = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.blocks: list[ScheduleBlock] = []
         self._timer = QTimer(self)
-        self._timer.setInterval(30_000)
+        self._timer.setInterval(20_000)
         self._timer.timeout.connect(self._check)
-        self._last_triggered: str = ""
+        # Klucz bloku, którego workflow jest obecnie aktywny (lub "" gdy brak)
+        self._active_block_key: str = ""
+        # Klucze bloków które użytkownik przerwał ręcznie – nie aktywuj ponownie
+        self._skipped_block_keys: set[str] = set()
         self.load()
 
     def start(self):
         self._timer.start()
+        # Pierwsze sprawdzenie od razu
+        self._check()
         logger.info("Harmonogram uruchomiony")
 
     def stop(self):
         self._timer.stop()
 
-    def _check(self):
+    def notify_manual_deactivation(self):
+        """
+        Wywołaj gdy użytkownik ręcznie przerywa profil.
+        Aktualnie aktywny blok nie zostanie ponownie uruchomiony.
+        """
+        if self._active_block_key:
+            self._skipped_block_keys.add(self._active_block_key)
+            logger.info(f"Harmonogram: blok '{self._active_block_key}' pominięty do końca okresu")
+            self._active_block_key = ""
+
+    def _find_current_block(self) -> ScheduleBlock | None:
         now = datetime.now()
         day, h, m = now.weekday(), now.hour, now.minute
+        for b in self.blocks:
+            if b.enabled and b.contains(day, h, m):
+                return b
+        return None
 
-        for block in self.blocks:
-            if block.enabled and block.contains(day, h, m):
-                key = f"{block.day}-{block.start_hour}-{block.start_min}"
-                if key != self._last_triggered:
-                    self._last_triggered = key
-                    logger.info(
-                        f"Harmonogram: aktywuj '{block.profile_name}' "
-                        f"({block.start_str()}–{block.end_str()})"
-                    )
-                    self.scheduleTriggered.emit(block.profile_name)
-                return
+    def _check(self):
+        current = self._find_current_block()
+        current_key = current._key() if current else ""
 
-        # Żaden blok nie jest aktywny – wyzeruj klucz aby re-trigger był możliwy
-        if self._last_triggered:
-            self._last_triggered = ""
+        # Przejście: poprzedni blok -> koniec
+        if self._active_block_key and self._active_block_key != current_key:
+            logger.info(f"Harmonogram: zakończono blok '{self._active_block_key}'")
+            self._active_block_key = ""
+            self.scheduleEnded.emit("")
+
+        if not current:
+            # Brak aktywnego bloku teraz – wyczyść pominięcia bloków, które już się skończyły
+            # (zapis kluczy, które obejmują inne przedziały, zostanie zresetowany gdy znów
+            #  znajdziemy się poza jakimkolwiek blokiem)
+            self._skipped_block_keys.clear()
+            return
+
+        # Użytkownik pominął ten blok? Nie uruchamiaj go ponownie.
+        if current_key in self._skipped_block_keys:
+            return
+
+        # Rozpoczynamy nowy blok
+        if current_key != self._active_block_key:
+            self._active_block_key = current_key
+            logger.info(
+                f"Harmonogram: aktywuj '{current.profile_name}' "
+                f"({current.start_str()}–{current.end_str()})"
+            )
+            self.scheduleTriggered.emit(current.profile_name)
 
     # ─── CRUD ────────────────────────────────────────────────────
 
@@ -146,7 +188,6 @@ class Scheduler(QObject):
             if "blocks" in data:
                 self.blocks = [ScheduleBlock.from_dict(b) for b in data["blocks"]]
             elif "entries" in data:
-                # Migracja starego formatu trigger → blok godzinny
                 self.blocks = []
                 for e in data["entries"]:
                     h = e.get("hour", 9)

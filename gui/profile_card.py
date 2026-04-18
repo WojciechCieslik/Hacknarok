@@ -46,7 +46,7 @@ class ProfileCard(QFrame):
     deleteClicked = Signal(str)
     duplicateClicked = Signal(str)
 
-    _COLLAPSED_H = 72
+    _COLLAPSED_H = 82
 
     def __init__(
         self,
@@ -124,48 +124,34 @@ class ProfileCard(QFrame):
         top_layout.addLayout(info, 1)
 
         # Przyciski akcji (prawa kolumna)
-        btn_col = QVBoxLayout()
-        btn_col.setSpacing(4)
-        btn_col.setContentsMargins(0, 0, 0, 0)
-
-        top_row = QHBoxLayout()
-        top_row.setSpacing(6)
-        top_row.setContentsMargins(0, 0, 0, 0)
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(6)
+        btn_row.setContentsMargins(0, 0, 0, 0)
 
         if is_active:
-            act_btn = self._make_btn("⏹", "#ef4444", "Dezaktywuj profil")
+            act_btn = self._make_btn("⏹  Dezaktywuj", "#ef4444")
         else:
-            act_btn = self._make_btn("▶", color, "Aktywuj profil")
+            act_btn = self._make_btn("▶  Aktywuj", color)
         act_btn.clicked.connect(lambda: self.switchClicked.emit(self.profile_name))
-        top_row.addWidget(act_btn)
+        btn_row.addWidget(act_btn)
 
-        edit_btn = self._make_btn("✎", "#94a3b8", "Edytuj profil")
+        edit_btn = self._make_btn("✎  Edytuj", "#94a3b8")
         edit_btn.clicked.connect(lambda: self.editClicked.emit(self.profile_name))
-        top_row.addWidget(edit_btn)
+        btn_row.addWidget(edit_btn)
 
-        del_btn = self._make_btn("✕", "#ef4444", "Usuń profil")
-        del_btn.clicked.connect(lambda: self.deleteClicked.emit(self.profile_name))
-        top_row.addWidget(del_btn)
-
-        btn_col.addLayout(top_row)
-
-        # Dolny rząd: duplikuj + rozwiń
-        bot_row = QHBoxLayout()
-        bot_row.setContentsMargins(0, 0, 0, 0)
-        bot_row.setSpacing(4)
-
-        dup_btn = self._make_btn("⊔", "#64748b", "Duplikuj profil", size=22)
+        dup_btn = self._make_btn("⊔  Duplikuj", "#64748b")
         dup_btn.clicked.connect(lambda: self.duplicateClicked.emit(self.profile_name))
-        bot_row.addWidget(dup_btn)
+        btn_row.addWidget(dup_btn)
 
-        bot_row.addStretch()
+        del_btn = self._make_btn("✕  Usuń", "#ef4444")
+        del_btn.clicked.connect(lambda: self.deleteClicked.emit(self.profile_name))
+        btn_row.addWidget(del_btn)
 
-        self._expand_btn = self._make_btn("˅", "#64748b", "Szczegóły", size=22)
+        self._expand_btn = self._make_btn("˅  Szczegóły", "#64748b")
         self._expand_btn.clicked.connect(self._toggle_expand)
-        bot_row.addWidget(self._expand_btn)
+        btn_row.addWidget(self._expand_btn)
 
-        btn_col.addLayout(bot_row)
-        top_layout.addLayout(btn_col)
+        top_layout.addLayout(btn_row)
 
         root.addWidget(top)
 
@@ -199,7 +185,7 @@ class ProfileCard(QFrame):
     def _toggle_expand(self):
         self._expanded = not self._expanded
         self._details.setVisible(self._expanded)
-        self._expand_btn.setText("˄" if self._expanded else "˅")
+        self._expand_btn.setText("˄  Zwiń" if self._expanded else "˅  Szczegóły")
         new_h = self._COLLAPSED_H + (self._details_h if self._expanded else 0)
         self.setFixedHeight(new_h)
         # Poinformuj layout rodzica o zmianie rozmiaru
@@ -208,11 +194,11 @@ class ProfileCard(QFrame):
             if hasattr(self.parent(), "adjustSize"):
                 self.parent().adjustSize()
 
-    def _make_btn(self, symbol: str, color: str, tooltip: str, size: int = 30) -> QPushButton:
-        btn = QPushButton(symbol)
-        btn.setFixedSize(size, size)
-        btn.setToolTip(tooltip)
-        f = QFont("Segoe UI Symbol", size // 3 + 3)
+    def _make_btn(self, label: str, color: str) -> QPushButton:
+        btn = QPushButton(label)
+        btn.setMinimumHeight(34)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        f = QFont("Segoe UI", 10)
         f.setBold(True)
         btn.setFont(f)
         hover_bg = _hex_to_rgba(color, 40)
@@ -224,7 +210,8 @@ class ProfileCard(QFrame):
                 border: 1px solid {border_dim};
                 border-radius: 6px;
                 color: {color};
-                padding: 0px;
+                padding: 4px 10px;
+                font-size: 12px;
             }}
             QPushButton:hover {{
                 background: {hover_bg};
@@ -235,3 +222,4 @@ class ProfileCard(QFrame):
             }}
         """)
         return btn
+

@@ -1,16 +1,17 @@
 """
 ProfileEditor – dialog tworzenia i edycji profilu.
 
-Interfejs presetowy z sekcjami: podstawy, harmonogram, głośność,
-motyw, powiadomienia, zablokowane aplikacje.
+Sekcje: podstawy, głośność, motyw, tapeta, zablokowane aplikacje.
 """
+
+import os
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
     QLabel, QLineEdit, QPushButton, QComboBox, QSlider,
     QWidget, QCheckBox, QMessageBox, QScrollArea, QFrame,
-    QSizePolicy,
+    QFileDialog,
 )
 
 from core.profile_manager import Profile
@@ -71,15 +72,15 @@ WELL_KNOWN_APPS = [
 # ─── Dialog edytora ─────────────────────────────────────────────────
 
 class ProfileEditorDialog(QDialog):
-    """Dialog tworzenia / edycji profilu z presetami."""
+    """Dialog tworzenia / edycji profilu."""
 
     profileSaved = Signal(dict)
 
     def __init__(self, profile: Profile = None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Edytuj profil" if profile else "Nowy profil")
-        self.setMinimumSize(620, 700)
-        self.resize(660, 800)
+        self.setMinimumSize(640, 720)
+        self.resize(680, 820)
 
         self._editing = profile
         self._app_rows: list[tuple[QCheckBox, str, str]] = []
@@ -93,7 +94,6 @@ class ProfileEditorDialog(QDialog):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # Scroll area z sekcjami
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -107,7 +107,7 @@ class ProfileEditorDialog(QDialog):
         cl.addWidget(self._section_basics(profile))
         cl.addWidget(self._section_volume(profile))
         cl.addWidget(self._section_theme(profile))
-        cl.addWidget(self._section_notifications(profile))
+        cl.addWidget(self._section_wallpaper(profile))
         cl.addWidget(self._section_apps(profile))
         cl.addStretch()
 
@@ -122,13 +122,17 @@ class ProfileEditorDialog(QDialog):
         bl = QHBoxLayout(btn_bar)
         bl.setContentsMargins(20, 12, 20, 12)
 
-        cancel = QPushButton("Anuluj")
+        cancel = QPushButton("✕  Anuluj")
+        cancel.setMinimumHeight(44)
+        cancel.setMinimumWidth(130)
         cancel.clicked.connect(self.reject)
         bl.addWidget(cancel)
         bl.addStretch()
 
         save = QPushButton("💾  Zapisz profil")
         save.setObjectName("primaryButton")
+        save.setMinimumHeight(44)
+        save.setMinimumWidth(180)
         save.clicked.connect(self._on_save)
         bl.addWidget(save)
 
@@ -258,7 +262,7 @@ class ProfileEditorDialog(QDialog):
             QPushButton {
                 background: #1e293b; color: #94a3b8;
                 border: 1px solid #334155; border-radius: 7px;
-                padding: 6px 20px; font-size: 13px;
+                padding: 8px 24px; font-size: 13px; min-height: 22px;
             }
             QPushButton:checked {
                 background: #7c3aed; color: #fff; border-color: #7c3aed;
@@ -275,7 +279,6 @@ class ProfileEditorDialog(QDialog):
         self._theme_light_btn.setStyleSheet(btn_style)
         self._theme_light_btn.setChecked(existing_dark is False)
 
-        # Wzajemne wykluczanie
         self._theme_dark_btn.clicked.connect(self._on_theme_dark)
         self._theme_light_btn.clicked.connect(self._on_theme_light)
 
@@ -296,27 +299,54 @@ class ProfileEditorDialog(QDialog):
         self._theme_light_btn.setChecked(True)
         self._theme_dark_btn.setChecked(False)
 
-    # ─── Sekcja: Powiadomienia ───────────────────────────────────
+    # ─── Sekcja: Tapeta ──────────────────────────────────────────
 
-    def _section_notifications(self, profile: Profile = None) -> QFrame:
-        frame, layout = self._make_section("🔔  Powiadomienia")
+    def _section_wallpaper(self, profile: Profile = None) -> QFrame:
+        frame, layout = self._make_section("🖼️  Tapeta pulpitu")
 
-        enabled = True
+        existing_path = ""
         if profile:
-            enabled = getattr(profile, "notifications_enabled", True)
+            for a in profile.actions:
+                if a.get("type") == "set_wallpaper":
+                    existing_path = a.get("image_path", "")
+                    break
 
-        self.notifications_cb = QCheckBox("Wyświetlaj powiadomienia systemowe")
-        self.notifications_cb.setChecked(enabled)
-        layout.addWidget(self.notifications_cb)
-
-        hint = QLabel(
-            "Powiadomienia o przełączeniu profilu oraz o zablokowanych aplikacjach."
+        self.wallpaper_enabled_cb = QCheckBox("Zmień tapetę przy aktywacji profilu")
+        self.wallpaper_enabled_cb.setChecked(bool(existing_path))
+        self.wallpaper_enabled_cb.stateChanged.connect(
+            lambda s: self._wp_widget.setVisible(bool(s))
         )
-        hint.setWordWrap(True)
-        hint.setStyleSheet("color: #64748b; font-size: 11px;")
-        layout.addWidget(hint)
+        layout.addWidget(self.wallpaper_enabled_cb)
+
+        self._wp_widget = QWidget()
+        wl = QHBoxLayout(self._wp_widget)
+        wl.setContentsMargins(0, 4, 0, 0)
+        wl.setSpacing(8)
+
+        self._wp_path_edit = QLineEdit(existing_path)
+        self._wp_path_edit.setPlaceholderText("Ścieżka do obrazu (jpg / png / bmp)...")
+        self._wp_path_edit.setReadOnly(False)
+        wl.addWidget(self._wp_path_edit, 1)
+
+        browse_btn = QPushButton("📁  Przeglądaj...")
+        browse_btn.setMinimumHeight(36)
+        browse_btn.clicked.connect(self._on_browse_wallpaper)
+        wl.addWidget(browse_btn)
+
+        layout.addWidget(self._wp_widget)
+        self._wp_widget.setVisible(self.wallpaper_enabled_cb.isChecked())
 
         return frame
+
+    def _on_browse_wallpaper(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Wybierz tapetę",
+            os.path.expanduser("~"),
+            "Obrazy (*.jpg *.jpeg *.png *.bmp *.webp);;Wszystkie pliki (*.*)",
+        )
+        if path:
+            self._wp_path_edit.setText(path)
 
     # ─── Sekcja: Zablokowane aplikacje ──────────────────────────
 
@@ -324,14 +354,12 @@ class ProfileEditorDialog(QDialog):
         frame, layout = self._make_section("🚫  Zablokowane aplikacje")
 
         hint = QLabel(
-            "Zaznaczone aplikacje będą zamrażane gdy profil jest aktywny.\n"
-            "Przy uruchomieniu zablokowanej aplikacji pojawi się powiadomienie."
+            "Zaznaczone aplikacje będą zamykane gdy profil jest aktywny."
         )
         hint.setWordWrap(True)
         hint.setStyleSheet("color: #64748b; font-size: 11px;")
         layout.addWidget(hint)
 
-        # Zbierz wcześniej zablokowane
         pre_checked: set[str] = set()
         if profile:
             for a in profile.actions:
@@ -345,8 +373,8 @@ class ProfileEditorDialog(QDialog):
         self._search_edit.textChanged.connect(self._filter_apps)
         search_row.addWidget(self._search_edit, 1)
 
-        refresh_btn = QPushButton("🔄")
-        refresh_btn.setFixedSize(36, 32)
+        refresh_btn = QPushButton("🔄  Odśwież")
+        refresh_btn.setMinimumHeight(36)
         refresh_btn.setToolTip("Odśwież listę uruchomionych aplikacji")
         refresh_btn.clicked.connect(self._refresh_apps)
         search_row.addWidget(refresh_btn)
@@ -355,7 +383,7 @@ class ProfileEditorDialog(QDialog):
         # Lista aplikacji
         apps_scroll = QScrollArea()
         apps_scroll.setWidgetResizable(True)
-        apps_scroll.setFixedHeight(240)
+        apps_scroll.setFixedHeight(260)
         apps_scroll.setStyleSheet("""
             QScrollArea {
                 border: 1px solid #334155;
@@ -380,73 +408,71 @@ class ProfileEditorDialog(QDialog):
     def _populate_apps(self, pre_checked: set[str] | None = None):
         if pre_checked is None:
             pre_checked = {
-                proc.lower() for _, proc, _ in self._app_rows
-                if self._checkbox_for(proc) and self._checkbox_for(proc).isChecked()
+                proc.lower() for cb, proc, _ in self._app_rows if cb.isChecked()
             }
 
-        # Wyczyść
         while self._apps_layout.count():
             item = self._apps_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
         self._app_rows.clear()
 
-        # Uruchomione aplikacje
+        # Pobierz uruchomione z oknami
         running_apps: list[dict] = []
         try:
             running_apps = SystemController.get_apps_with_windows()
         except Exception:
             pass
 
-        running_names = {a["process_name"].lower() for a in running_apps}
+        running_names_lc = {a["process_name"].lower() for a in running_apps}
 
-        # Scal: uruchomione pierwsze, potem well-known nie-uruchomione
-        merged: list[dict] = [
-            {**a, "is_running": True} for a in running_apps
-        ]
-        for app in WELL_KNOWN_APPS:
-            if app["process_name"].lower() not in running_names:
-                merged.append({**app, "is_running": False})
-
-        # Nagłówek sekcji
+        # Sekcja 1: uruchomione teraz
         if running_apps:
             self._add_section_label("Uruchomione teraz")
+            for app in running_apps:
+                self._add_app_row(
+                    app["process_name"], app["display_name"],
+                    is_running=True, checked=app["process_name"].lower() in pre_checked,
+                )
 
-        running_added = 0
-        for app in merged:
-            if not app["is_running"] and running_added == len(running_apps) and running_apps:
-                # Separator przed sekcją znanych aplikacji
+        # Separator między sekcjami
+        known_apps = [
+            a for a in WELL_KNOWN_APPS
+            if a["process_name"].lower() not in running_names_lc
+        ]
+
+        if known_apps:
+            if running_apps:
                 sep = QFrame()
                 sep.setFrameShape(QFrame.Shape.HLine)
                 sep.setStyleSheet("QFrame { color: #1e293b; margin: 6px 0; }")
                 self._apps_layout.addWidget(sep)
-                self._add_section_label("Znane aplikacje")
 
-            proc_name = app["process_name"]
-            display_name = app["display_name"]
-            is_running = app["is_running"]
-
-            cb = QCheckBox(
-                ("🟢  " if is_running else "      ")
-                + f"{display_name}   ({proc_name})"
-            )
-            cb.setChecked(proc_name.lower() in pre_checked)
-            cb.setStyleSheet(
-                "color: #f1f5f9; font-size: 12px; padding: 3px 0;"
-                " background: transparent;"
-            )
-
-            self._app_rows.append((cb, proc_name, display_name))
-            self._apps_layout.addWidget(cb)
-
-            if is_running:
-                running_added += 1
+            # Etykieta sekcji – dokładnie raz
+            self._add_section_label("Znane aplikacje")
+            for app in known_apps:
+                self._add_app_row(
+                    app["process_name"], app["display_name"],
+                    is_running=False, checked=app["process_name"].lower() in pre_checked,
+                )
 
         self._apps_layout.addStretch()
 
         # Przywróć filtr
         if hasattr(self, "_search_edit"):
             self._filter_apps(self._search_edit.text())
+
+    def _add_app_row(self, proc_name: str, display_name: str,
+                     is_running: bool, checked: bool):
+        prefix = "🟢  " if is_running else "      "
+        cb = QCheckBox(f"{prefix}{display_name}   ({proc_name})")
+        cb.setChecked(checked)
+        cb.setStyleSheet(
+            "color: #f1f5f9; font-size: 12px; padding: 4px 0;"
+            " background: transparent;"
+        )
+        self._app_rows.append((cb, proc_name, display_name))
+        self._apps_layout.addWidget(cb)
 
     def _add_section_label(self, text: str):
         lbl = QLabel(text)
@@ -456,12 +482,6 @@ class ProfileEditorDialog(QDialog):
             " padding: 4px 0 2px 0; background: transparent;"
         )
         self._apps_layout.addWidget(lbl)
-
-    def _checkbox_for(self, proc_name: str) -> QCheckBox | None:
-        for cb, pn, _ in self._app_rows:
-            if pn.lower() == proc_name.lower():
-                return cb
-        return None
 
     def _refresh_apps(self):
         current_checked = {
@@ -489,18 +509,20 @@ class ProfileEditorDialog(QDialog):
 
         actions: list[dict] = []
 
-        # Głośność
         if self.volume_enabled_cb.isChecked():
             actions.append({"type": "set_volume", "level": self._vol_slider.value()})
 
-        # Motyw
         if self.theme_enabled_cb.isChecked():
             actions.append({
                 "type": "set_theme",
                 "dark": self._theme_dark_btn.isChecked(),
             })
 
-        # Zablokowane aplikacje
+        if self.wallpaper_enabled_cb.isChecked():
+            wp_path = self._wp_path_edit.text().strip()
+            if wp_path:
+                actions.append({"type": "set_wallpaper", "image_path": wp_path})
+
         for cb, proc_name, display_name in self._app_rows:
             if cb.isChecked():
                 actions.append({
@@ -509,9 +531,9 @@ class ProfileEditorDialog(QDialog):
                     "display_name": display_name,
                 })
 
-        # Zachowaj istniejące akcje nieobjęte presetem (tapeta, plan zasilania, uruchom)
+        # Zachowaj pozostałe akcje nie obsługiwane przez preset (np. launch_app)
         if self._editing:
-            preset_types = {"set_volume", "set_theme", "block_process"}
+            preset_types = {"set_volume", "set_theme", "set_wallpaper", "block_process"}
             for a in self._editing.actions:
                 if a.get("type") not in preset_types:
                     actions.append(a)
@@ -522,7 +544,6 @@ class ProfileEditorDialog(QDialog):
             "color": self.color_combo.currentData(),
             "description": "",
             "actions": actions,
-            "notifications_enabled": self.notifications_cb.isChecked(),
         }
 
         self.profileSaved.emit(data)

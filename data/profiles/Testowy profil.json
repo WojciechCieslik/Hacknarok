@@ -5,7 +5,7 @@
   "description": "",
   "actions": [
     {
-      "level": 89,
+      "level": 6,
       "type": "set_volume"
     },
     {
@@ -17,6 +17,5 @@
       "process_name": "Spotify.exe",
       "type": "block_process"
     }
-  ],
-  "notifications_enabled": false
+  ]
 }
