@@ -1,0 +1,89 @@
+{
+  "profiles": [
+    {
+      "name": "Praca",
+      "icon": "🏢",
+      "color": "#3b82f6",
+      "description": "Skup się na pracy – wyłącz rozpraszacze, ciemny motyw, niska głośność.",
+      "actions": [
+        {
+          "type": "set_volume",
+          "level": 30
+        },
+        {
+          "type": "set_theme",
+          "dark": true
+        }
+      ]
+    },
+    {
+      "name": "Nauka",
+      "icon": "📚",
+      "color": "#10b981",
+      "description": "Tryb nauki – skupienie, cisza, jasny motyw.",
+      "actions": [
+        {
+          "type": "set_volume",
+          "level": 20
+        },
+        {
+          "type": "set_theme",
+          "dark": false
+        }
+      ]
+    },
+    {
+      "name": "Rozrywka",
+      "icon": "🎬",
+      "color": "#f59e0b",
+      "description": "Czas na relaks – głośna muzyka, ciemny motyw.",
+      "actions": [
+        {
+          "type": "set_volume",
+          "level": 80
+        },
+        {
+          "type": "set_theme",
+          "dark": true
+        }
+      ]
+    },
+    {
+      "name": "Chuj",
+      "icon": "🏢",
+      "color": "#3b82f6",
+      "description": "",
+      "actions": [
+        {
+          "image_path": "C:/Users/micha/Desktop/basiagrill.png",
+          "type": "set_wallpaper"
+        },
+        {
+          "level": 50,
+          "type": "set_volume"
+        },
+        {
+          "process_name": "",
+          "type": "kill_process"
+        }
+      ]
+    },
+    {
+      "name": "wojtek",
+      "icon": "🏢",
+      "color": "#3b82f6",
+      "description": "",
+      "actions": [
+        {
+          "process_name": "chrome.exe",
+          "type": "kill_process"
+        },
+        {
+          "level": 50,
+          "type": "set_volume"
+        }
+      ]
+    }
+  ],
+  "active": null
+}

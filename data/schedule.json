@@ -1,0 +1,30 @@
+{
+  "entries": [
+    {
+      "profile_name": "Praca",
+      "hour": 9,
+      "minute": 0,
+      "days": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "enabled": true
+    },
+    {
+      "profile_name": "Rozrywka",
+      "hour": 17,
+      "minute": 0,
+      "days": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "enabled": true
+    }
+  ]
+}
