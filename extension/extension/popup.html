@@ -14,7 +14,17 @@
     <div id="server-status" class="status">Łączenie…</div>
   </header>
 
-  <div id="lock-notice" class="lock-notice" hidden>Profil chroniony </div>
+  <div id="lock-notice" class="lock-notice" hidden>🔒 Profil chroniony hasłem</div>
+
+  <section id="unlock-box" class="add-box" hidden>
+    <input
+      id="password-input"
+      type="password"
+      placeholder="Wpisz hasło profilu..."
+      autocomplete="off"
+    />
+    <button id="unlock-btn">Odblokuj</button>
+  </section>
 
   <section class="add-box">
     <input

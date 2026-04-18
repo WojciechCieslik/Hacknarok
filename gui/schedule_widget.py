@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.scheduler import Scheduler, ScheduleBlock, DAY_NAMES
+from gui.password_utils import request_profile_password
 
 
 # ─── Stałe siatki ────────────────────────────────────────────────────
@@ -49,7 +50,8 @@ class BlockAssignDialog(QDialog):
     """Dialog wyboru profilu dla zaznaczonego przedziału czasu."""
 
     def __init__(self, day: int, slot_start: int, slot_end: int,
-                 scheduler: Scheduler, profile_names: list[str], parent=None):
+                 scheduler: Scheduler, profile_names: list[str],
+                 profile_manager=None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Przypisz profil")
         self.setFixedSize(340, 190)
@@ -61,6 +63,7 @@ class BlockAssignDialog(QDialog):
         self._slot_start = slot_start
         self._slot_end = slot_end
         self._scheduler = scheduler
+        self._profile_manager = profile_manager
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -119,6 +122,13 @@ class BlockAssignDialog(QDialog):
             self.reject()
             return
 
+        if self._profile_manager:
+            profile = self._profile_manager.get_profile(profile_name)
+            if profile and not request_profile_password(
+                self, profile, f"dodać profil '{profile.name}' do harmonogramu"
+            ):
+                return
+
         h_start, m_start = _slot_to_hm(self._slot_start)
         h_end, m_end = _slot_to_hm(self._slot_end)
 
@@ -147,10 +157,12 @@ class BlockAssignDialog(QDialog):
 class CalendarGrid(QWidget):
     """Rysowalny widget siatki tygodniowej 7×48."""
 
-    def __init__(self, scheduler: Scheduler, profile_names: list[str], parent=None):
+    def __init__(self, scheduler: Scheduler, profile_names: list[str],
+                 profile_manager=None, parent=None):
         super().__init__(parent)
         self.scheduler = scheduler
         self.profile_names = profile_names
+        self.profile_manager = profile_manager
         self._profile_colors: dict[str, str] = {}
 
         self._drag_start: tuple[int, int] | None = None  # (day, slot)
@@ -356,12 +368,20 @@ class CalendarGrid(QWidget):
         s1, s2 = self._drag_start[1], self._drag_end[1]
         slot_start = min(s1, s2)
         slot_end = max(s1, s2) + 1   # slot_end = pierwszy slot PO bloku
+
+        # Jeśli przedział nachodzi na blok chronionego profilu – wymagaj hasła
+        if self.profile_manager and not self._check_overlap_password(
+            self._drag_day, slot_start, slot_end
+        ):
+            return
+
         dlg = BlockAssignDialog(
             day=self._drag_day,
             slot_start=slot_start,
             slot_end=slot_end,
             scheduler=self.scheduler,
             profile_names=self.profile_names,
+            profile_manager=self.profile_manager,
             parent=self,
         )
         # Wycentruj dialog względem zaznaczenia, z clampem do ekranu
@@ -395,8 +415,42 @@ class CalendarGrid(QWidget):
         )
         action = menu.exec(global_pos)
         if action == del_act:
+            profile = (
+                self.profile_manager.get_profile(block.profile_name)
+                if self.profile_manager else None
+            )
+            if profile and not request_profile_password(
+                self, profile, "usunąć blok z harmonogramu"
+            ):
+                return
             self.scheduler.remove_block(block_idx)
             self.update()
+
+    def _check_overlap_password(self, day: int, slot_start: int, slot_end: int) -> bool:
+        """Dla każdego chronionego profilu nachodzącego na przedział – wymagaj hasła."""
+        h_start, m_start = _slot_to_hm(slot_start)
+        h_end, m_end = _slot_to_hm(slot_end)
+        start_m = h_start * 60 + m_start
+        end_m = h_end * 60 + m_end
+
+        checked: set[str] = set()
+        for b in self.scheduler.blocks:
+            if b.day != day:
+                continue
+            b_start = b.start_hour * 60 + b.start_min
+            b_end = b.end_hour * 60 + b.end_min
+            if b_start < end_m and b_end > start_m:
+                if b.profile_name in checked:
+                    continue
+                checked.add(b.profile_name)
+                profile = self.profile_manager.get_profile(b.profile_name)
+                if profile and profile.locked:
+                    if not request_profile_password(
+                        self, profile,
+                        f"nadpisać blok profilu '{profile.name}' w harmonogramie",
+                    ):
+                        return False
+        return True
 
 
 # ─── Główny widget harmonogramu ───────────────────────────────────────
@@ -404,9 +458,11 @@ class CalendarGrid(QWidget):
 class WeeklyCalendarWidget(QWidget):
     """Wizualny harmonogram tygodniowy."""
 
-    def __init__(self, scheduler: Scheduler, profile_names: list[str], parent=None):
+    def __init__(self, scheduler: Scheduler, profile_names: list[str],
+                 profile_manager=None, parent=None):
         super().__init__(parent)
         self.scheduler = scheduler
+        self.profile_manager = profile_manager
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -430,7 +486,7 @@ class WeeklyCalendarWidget(QWidget):
         self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._scroll.setStyleSheet("QScrollArea { border: none; }")
 
-        self._grid = CalendarGrid(scheduler, profile_names)
+        self._grid = CalendarGrid(scheduler, profile_names, profile_manager=profile_manager)
         self._scroll.setWidget(self._grid)
         layout.addWidget(self._scroll, 1)
 
