@@ -581,24 +581,48 @@ class ProfileEditorDialog(QDialog):
 
     def _add_site_row(self, site: str):
         row = QWidget()
-        row.setStyleSheet("background: transparent;")
+        row.setStyleSheet("""
+            QWidget#siteRow {
+                background: #1e293b;
+                border-radius: 8px;
+                border: 1px solid #334155;
+            }
+            QWidget#siteRow:hover { background: #263548; }
+        """)
+        row.setObjectName("siteRow")
+        row.setFixedHeight(36)
+
         rl = QHBoxLayout(row)
-        rl.setContentsMargins(8, 2, 8, 2)
+        rl.setContentsMargins(10, 0, 6, 0)
         rl.setSpacing(8)
 
+        globe = QLabel("🌐")
+        globe.setStyleSheet("background: transparent; font-size: 13px;")
+        rl.addWidget(globe)
+
         lbl = QLabel(site)
-        lbl.setStyleSheet("color: #f1f5f9; font-size: 12px;")
+        lbl.setStyleSheet(
+            "color: #e2e8f0; font-size: 12px; background: transparent;"
+        )
         rl.addWidget(lbl, 1)
 
         del_btn = QPushButton("✕")
-        del_btn.setFixedSize(28, 28)
+        del_btn.setFixedSize(24, 24)
+        del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         del_btn.setStyleSheet("""
             QPushButton {
-                background: #1e293b; color: #ef4444;
-                border: 1px solid #334155; border-radius: 6px;
-                font-size: 12px;
+                background: #0f172a;
+                color: #64748b;
+                border: 1px solid #334155;
+                border-radius: 12px;
+                font-size: 11px;
+                font-weight: bold;
             }
-            QPushButton:hover { background: #ef4444; color: #fff; }
+            QPushButton:hover {
+                background: #ef4444;
+                color: #fff;
+                border-color: #ef4444;
+            }
         """)
         del_btn.clicked.connect(lambda: self._remove_site_row(site, row))
         rl.addWidget(del_btn)
