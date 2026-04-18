@@ -1,0 +1,21 @@
+{
+  "name": "Testowy profil",
+  "icon": "📚",
+  "color": "#10b981",
+  "description": "",
+  "actions": [
+    {
+      "level": 6,
+      "type": "set_volume"
+    },
+    {
+      "dark": true,
+      "type": "set_theme"
+    },
+    {
+      "display_name": "Spotify",
+      "process_name": "Spotify.exe",
+      "type": "block_process"
+    }
+  ]
+}
