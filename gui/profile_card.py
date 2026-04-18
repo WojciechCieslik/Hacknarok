@@ -3,7 +3,7 @@ ProfileCard – wiersz profilu na liście z rozwijalnymi szczegółami.
 """
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QColor
 from PySide6.QtWidgets import (
     QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy
 )
@@ -18,34 +18,33 @@ def _hex_to_rgba(hex_color: str, alpha: int) -> str:
 
 
 def _build_details_text(actions: list[dict], blocked_sites: list[str] = None) -> list[str]:
-    """Zwróć listę czytelnych linii opisu akcji profilu."""
     lines = []
     blocked = []
     for a in actions:
         t = a.get("type", "")
         if t == "set_theme":
-            lines.append("🌙  Motyw: ciemny" if a.get("dark", True) else "☀️  Motyw: jasny")
+            lines.append("MOTYW  ciemny" if a.get("dark", True) else "MOTYW  jasny")
         elif t == "set_wallpaper":
             import os
             name = os.path.basename(a.get("image_path", "") or "")
             if name:
-                lines.append(f"🖼️  Tapeta: {name}")
+                lines.append(f"TAPETA  {name}")
         elif t == "block_process":
             blocked.append(a.get("display_name") or a.get("process_name", "?"))
         elif t == "launch_app":
             label = a.get("label") or a.get("path", "?")
-            lines.append(f"🚀  Uruchamia: {label}")
+            lines.append(f"LAUNCH  {label}")
     if blocked:
         preview = ", ".join(blocked[:3])
         if len(blocked) > 3:
             preview += f"  (+{len(blocked) - 3})"
-        lines.append(f"🚫  Blokuje aplikacje: {preview}")
+        lines.append(f"BLOKUJE  {preview}")
     if blocked_sites:
         preview = ", ".join(blocked_sites[:3])
         if len(blocked_sites) > 3:
             preview += f"  (+{len(blocked_sites) - 3})"
-        lines.append(f"🌐  Blokuje strony: {preview}")
-    return lines or ["Brak skonfigurowanych akcji"]
+        lines.append(f"STRONY  {preview}")
+    return lines or ["-- brak skonfigurowanych akcji --"]
 
 
 class ProfileCard(QFrame):
@@ -58,7 +57,7 @@ class ProfileCard(QFrame):
     def __init__(
         self,
         name: str,
-        icon: str = "🖥️",
+        icon: str = "SYS",
         color: str = "#7c3aed",
         description: str = "",
         actions_count: int = 0,
@@ -98,11 +97,15 @@ class ProfileCard(QFrame):
 
         # Ikona
         icon_label = QLabel(icon)
-        icon_label.setFont(QFont("Segoe UI Emoji", 20))
+        icon_label.setFont(QFont("JetBrains Mono, Consolas, Courier New", 9))
         icon_label.setFixedSize(44, 44)
         icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         icon_label.setStyleSheet(
-            f"background: {_hex_to_rgba(color, 34)}; border-radius: 10px;"
+            f"background: {_hex_to_rgba(color, 20)};"
+            f"color: {color};"
+            f"border: 1px solid {_hex_to_rgba(color, 80)};"
+            f"font-family: 'JetBrains Mono', 'Consolas', monospace;"
+            f"font-size: 9px; font-weight: bold; letter-spacing: 1px;"
         )
         top_layout.addWidget(icon_label)
 
@@ -111,22 +114,31 @@ class ProfileCard(QFrame):
         info.setSpacing(2)
         info.setContentsMargins(0, 0, 0, 0)
 
-        name_label = QLabel(name)
-        name_label.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
-        name_label.setStyleSheet(f"color: {color}; background: transparent;")
+        name_label = QLabel(name.upper())
+        name_label.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        name_label.setStyleSheet(
+            f"color: {color}; background: transparent; letter-spacing: 1px;"
+        )
         info.addWidget(name_label)
 
         if is_active:
-            sub = QLabel("● AKTYWNY")
+            sub = QLabel(">> AKTYWNY")
             sub.setStyleSheet(
-                "color: #10b981; font-size: 11px; font-weight: bold; background: transparent;"
+                "color: #00C853; font-size: 10px; font-weight: bold;"
+                " background: transparent; letter-spacing: 2px;"
+                " font-family: 'JetBrains Mono', 'Consolas', monospace;"
             )
         elif description:
             sub = QLabel(description)
-            sub.setStyleSheet("color: #94a3b8; font-size: 11px; background: transparent;")
+            sub.setStyleSheet(
+                "color: #666666; font-size: 11px; background: transparent;"
+            )
         else:
-            sub = QLabel(f"{actions_count} akcji")
-            sub.setStyleSheet("color: #64748b; font-size: 11px; background: transparent;")
+            sub = QLabel(f"{actions_count} akcji skonfigurowanych")
+            sub.setStyleSheet(
+                "color: #444444; font-size: 10px; background: transparent;"
+                " letter-spacing: 1px; font-family: 'JetBrains Mono', 'Consolas', monospace;"
+            )
         info.addWidget(sub)
 
         top_layout.addLayout(info, 1)
@@ -137,21 +149,21 @@ class ProfileCard(QFrame):
         btn_row.setContentsMargins(0, 0, 0, 0)
 
         if is_active:
-            act_btn = self._make_btn("⏹  Dezaktywuj", "#ef4444")
+            act_btn = self._make_btn("STOP", "#FF1744")
         else:
-            act_btn = self._make_btn("▶  Aktywuj", color)
+            act_btn = self._make_btn("RUN", color)
         act_btn.clicked.connect(lambda: self.switchClicked.emit(self.profile_name))
         btn_row.addWidget(act_btn)
 
-        edit_btn = self._make_btn("✎  Edytuj", "#94a3b8")
+        edit_btn = self._make_btn("EDIT", "#555555")
         edit_btn.clicked.connect(lambda: self.editClicked.emit(self.profile_name))
         btn_row.addWidget(edit_btn)
 
-        del_btn = self._make_btn("✕  Usuń", "#ef4444")
+        del_btn = self._make_btn("DEL", "#FF1744")
         del_btn.clicked.connect(lambda: self.deleteClicked.emit(self.profile_name))
         btn_row.addWidget(del_btn)
 
-        self._expand_btn = self._make_btn("˅  Szczegóły", "#64748b")
+        self._expand_btn = self._make_btn("[+]", "#444444")
         self._expand_btn.clicked.connect(self._toggle_expand)
         btn_row.addWidget(self._expand_btn)
 
@@ -163,20 +175,20 @@ class ProfileCard(QFrame):
         self._details = QFrame()
         self._details.setVisible(False)
         self._details.setStyleSheet(
-            f"background: {_hex_to_rgba(color, 12)};"
-            f"border-top: 1px solid {_hex_to_rgba(color, 60)};"
-            "border-radius: 0 0 12px 12px; border-left: none; border-right: none;"
+            f"background: {_hex_to_rgba(color, 6)};"
+            f"border-top: 1px solid {_hex_to_rgba(color, 40)};"
         )
 
         det_layout = QVBoxLayout(self._details)
         det_layout.setContentsMargins(62, 8, 14, 10)
-        det_layout.setSpacing(3)
+        det_layout.setSpacing(2)
 
         detail_lines = _build_details_text(actions, blocked_sites)
         for line in detail_lines:
             lbl = QLabel(line)
             lbl.setStyleSheet(
-                "color: #94a3b8; font-size: 11px; background: transparent; border: none;"
+                "color: #555555; font-size: 10px; background: transparent; border: none;"
+                " font-family: 'JetBrains Mono', 'Consolas', monospace; letter-spacing: 1px;"
             )
             det_layout.addWidget(lbl)
 
@@ -189,7 +201,7 @@ class ProfileCard(QFrame):
     def _toggle_expand(self):
         self._expanded = not self._expanded
         self._details.setVisible(self._expanded)
-        self._expand_btn.setText("˄  Zwiń" if self._expanded else "˅  Szczegóły")
+        self._expand_btn.setText("[-]" if self._expanded else "[+]")
         new_h = self._COLLAPSED_H + (self._details_h if self._expanded else 0)
         self.setFixedHeight(new_h)
         # Poinformuj layout rodzica o zmianie rozmiaru
@@ -200,22 +212,25 @@ class ProfileCard(QFrame):
 
     def _make_btn(self, label: str, color: str) -> QPushButton:
         btn = QPushButton(label)
-        btn.setMinimumHeight(34)
+        btn.setMinimumHeight(30)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        f = QFont("Segoe UI", 10)
+        f = QFont("JetBrains Mono, Consolas, Courier New", 9)
         f.setBold(True)
         btn.setFont(f)
-        hover_bg = _hex_to_rgba(color, 40)
-        pressed_bg = _hex_to_rgba(color, 80)
-        border_dim = _hex_to_rgba(color, 100)
+        hover_bg = _hex_to_rgba(color, 20)
+        pressed_bg = _hex_to_rgba(color, 50)
+        border_dim = _hex_to_rgba(color, 80)
         btn.setStyleSheet(f"""
             QPushButton {{
                 background: transparent;
                 border: 1px solid {border_dim};
-                border-radius: 6px;
+                border-radius: 0px;
                 color: {color};
                 padding: 4px 10px;
-                font-size: 12px;
+                font-size: 10px;
+                font-weight: bold;
+                letter-spacing: 1px;
+                font-family: 'JetBrains Mono', 'Consolas', monospace;
             }}
             QPushButton:hover {{
                 background: {hover_bg};

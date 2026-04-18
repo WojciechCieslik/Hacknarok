@@ -92,7 +92,7 @@ class MainWindow(QMainWindow):
         self.cards_scroll.setWidget(self.cards_container)
         profiles_layout.addWidget(self.cards_scroll)
 
-        self.tabs.addTab(profiles_tab, "🖥️ Profile")
+        self.tabs.addTab(profiles_tab, "Profile")
 
         # Tab 2: Harmonogram
         schedule_tab = QWidget()
@@ -105,11 +105,11 @@ class MainWindow(QMainWindow):
         )
         schedule_layout.addWidget(self.schedule_widget)
 
-        self.tabs.addTab(schedule_tab, "📅 Harmonogram")
+        self.tabs.addTab(schedule_tab, "Harmonogram")
 
         # Tab 3: Ustawienia
         settings_tab = self._build_settings_tab()
-        self.tabs.addTab(settings_tab, "⚙️ Ustawienia")
+        self.tabs.addTab(settings_tab, "Ustawienia")
 
         self.tabs.currentChanged.connect(self._on_tab_changed)
         main_layout.addWidget(self.tabs, 1)
@@ -124,7 +124,7 @@ class MainWindow(QMainWindow):
         title_col = QVBoxLayout()
         title_col.setSpacing(2)
 
-        title = QLabel("🧠 Context Switcher Pro")
+        title = QLabel("Context Switcher Pro")
         title.setObjectName("titleLabel")
         title_col.addWidget(title)
 
@@ -135,15 +135,17 @@ class MainWindow(QMainWindow):
         header.addLayout(title_col)
         header.addStretch()
 
-        self.active_badge = QLabel("Brak aktywnego profilu")
+        self.active_badge = QLabel("-- brak aktywnego profilu --")
         self.active_badge.setStyleSheet("""
             QLabel {
-                background: #1e293b;
-                color: #94a3b8;
-                border: 1px solid #334155;
-                border-radius: 8px;
-                padding: 8px 16px;
-                font-size: 13px;
+                background: #141414;
+                color: #444444;
+                border: 1px solid #1e1e1e;
+                border-left: 2px solid #2a2a2a;
+                padding: 6px 14px;
+                font-size: 10px;
+                font-family: "JetBrains Mono", "Consolas", monospace;
+                letter-spacing: 1px;
             }
         """)
         header.addWidget(self.active_badge)
@@ -160,7 +162,7 @@ class MainWindow(QMainWindow):
         info_frame.setObjectName("cardFrame")
         info_layout = QVBoxLayout(info_frame)
 
-        info_title = QLabel("ℹ️ O aplikacji")
+        info_title = QLabel("O aplikacji")
         info_title.setObjectName("sectionTitle")
         info_layout.addWidget(info_title)
 
@@ -183,16 +185,7 @@ class MainWindow(QMainWindow):
 
     def _build_status_bar(self):
         status_bar = self.statusBar()
-        status_bar.setStyleSheet("""
-            QStatusBar {
-                background: #111827;
-                color: #64748b;
-                border-top: 1px solid #1e293b;
-                font-size: 11px;
-                padding: 4px;
-            }
-        """)
-        status_bar.showMessage("Gotowy – Context Switcher Pro v1.0")
+        status_bar.showMessage("READY  //  Context Switcher Pro v1.0")
 
     # ─── System Tray (bez powiadomień push) ───────────────────────
 
@@ -210,7 +203,7 @@ class MainWindow(QMainWindow):
         tray_menu.addSeparator()
 
         for profile in self.profile_manager.profiles:
-            action = QAction(f"{profile.icon} {profile.name}", self)
+            action = QAction(profile.name, self)
             name = profile.name
             action.triggered.connect(
                 lambda checked, n=name: self._on_card_switch(n)
@@ -219,7 +212,7 @@ class MainWindow(QMainWindow):
 
         tray_menu.addSeparator()
 
-        deactivate_action = QAction("⏹ Dezaktywuj profil", self)
+        deactivate_action = QAction("Dezaktywuj profil", self)
         deactivate_action.triggered.connect(self._manual_deactivate)
         tray_menu.addAction(deactivate_action)
 
@@ -267,7 +260,7 @@ class MainWindow(QMainWindow):
             card.deleteClicked.connect(self._on_card_delete)
             self.cards_layout.addWidget(card)
 
-        add_btn = QPushButton("  ➕  Nowy profil")
+        add_btn = QPushButton("+ Nowy profil")
         add_btn.setObjectName("profileAddButton")
         add_btn.setFixedHeight(52)
         add_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -352,36 +345,38 @@ class MainWindow(QMainWindow):
         if name:
             profile = self.profile_manager.get_profile(name)
             if profile:
-                self.active_badge.setText(f"{profile.icon} {profile.name}")
-                bg = _hex_to_rgba(profile.color, 38)
-                border = _hex_to_rgba(profile.color, 160)
+                self.active_badge.setText(f"[ {profile.name.upper()} ]")
                 self.active_badge.setStyleSheet(f"""
                     QLabel {{
-                        background: {bg};
-                        color: {profile.color};
-                        border: 1px solid {border};
-                        border-radius: 8px;
-                        padding: 8px 16px;
-                        font-size: 13px;
+                        background: rgba(0, 200, 83, 0.08);
+                        color: #00C853;
+                        border: 1px solid rgba(0, 200, 83, 0.3);
+                        border-left: 2px solid #00C853;
+                        padding: 6px 14px;
+                        font-size: 10px;
+                        font-family: "JetBrains Mono", "Consolas", monospace;
                         font-weight: bold;
+                        letter-spacing: 2px;
                     }}
                 """)
                 self.statusBar().showMessage(
-                    f"Przełączono na profil: {profile.icon} {profile.name}"
+                    f"AKTYWNY: {profile.name.upper()}"
                 )
         else:
-            self.active_badge.setText("Brak aktywnego profilu")
+            self.active_badge.setText("-- brak aktywnego profilu --")
             self.active_badge.setStyleSheet("""
                 QLabel {
-                    background: #1e293b;
-                    color: #94a3b8;
-                    border: 1px solid #334155;
-                    border-radius: 8px;
-                    padding: 8px 16px;
-                    font-size: 13px;
+                    background: #141414;
+                    color: #444444;
+                    border: 1px solid #1e1e1e;
+                    border-left: 2px solid #2a2a2a;
+                    padding: 6px 14px;
+                    font-size: 10px;
+                    font-family: "JetBrains Mono", "Consolas", monospace;
+                    letter-spacing: 1px;
                 }
             """)
-            self.statusBar().showMessage("Profil dezaktywowany – stan przywrócony")
+            self.statusBar().showMessage("DEZAKTYWOWANY -- stan przywrocony")
 
         self._refresh_profiles()
 
