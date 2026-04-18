@@ -150,9 +150,9 @@ def get_state():
         active_name = _read_active_name()
 
     if not active_name or active_name not in profiles:
-        active_name = next(iter(profiles), None)
+        active_name = "Brak profilu"
 
-    active_profile = _profile_for_extension(profiles[active_name]) if active_name else {}
+    active_profile = _profile_for_extension(profiles[active_name]) if active_name !="Brak profilu" else {}
 
     return jsonify({
         "activeProfile": active_name,
