@@ -1,13 +1,9 @@
 {
   "name": "Nauka Cyfrówki",
   "icon": "📚",
-  "color": "#3b82f6",
+  "color": "#8b5cf6",
   "description": "",
   "actions": [
-    {
-      "level": 79,
-      "type": "set_volume"
-    },
     {
       "dark": true,
       "type": "set_theme"
@@ -28,5 +24,7 @@
       "type": "block_process"
     }
   ],
-  "notifications_enabled": true
+  "blocked_sites": [
+    "youtube.com"
+  ]
 }

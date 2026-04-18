@@ -2,7 +2,7 @@
 SystemController – wrapper na Windows API.
 
 Hermetyzuje wszystkie wywołania systemowe:
-głośność (winmm), tapeta, motyw, procesy, aktywne okno.
+tapeta, motyw, procesy, aktywne okno.
 """
 
 import ctypes
@@ -10,7 +10,6 @@ import os
 import subprocess
 import winreg
 import logging
-from ctypes import wintypes
 from typing import Tuple
 
 logger = logging.getLogger(__name__)
@@ -18,45 +17,6 @@ logger = logging.getLogger(__name__)
 
 class SystemController:
     """Kontroler systemowy – enkapsuluje wywołania Windows API."""
-
-    # ─── Głośność (winmm – waveOutSetVolume / waveOutGetVolume) ─
-
-    @staticmethod
-    def get_volume() -> int:
-        """Pobierz aktualny poziom głośności (0-100)."""
-        try:
-            dword = wintypes.DWORD()
-            # 0 = pierwsze urządzenie wyjściowe
-            winmm = ctypes.WinDLL("winmm", use_last_error=True)
-            rc = winmm.waveOutGetVolume(0, ctypes.byref(dword))
-            if rc != 0:
-                logger.error(f"waveOutGetVolume rc={rc}")
-                return 50
-            # dolne 16 bitów = lewy, górne 16 bitów = prawy; uśrednij
-            left = dword.value & 0xFFFF
-            right = (dword.value >> 16) & 0xFFFF
-            avg = (left + right) // 2
-            return int(round(avg / 0xFFFF * 100))
-        except Exception as e:
-            logger.error(f"Nie udało się pobrać głośności: {e}")
-            return 50
-
-    @staticmethod
-    def set_volume(level: int) -> bool:
-        """Ustaw głośność systemową (0-100)."""
-        try:
-            level = max(0, min(100, level))
-            scalar = int(round(level / 100.0 * 0xFFFF))
-            packed = (scalar << 16) | scalar  # obie strony (L+R)
-            winmm = ctypes.WinDLL("winmm", use_last_error=True)
-            rc = winmm.waveOutSetVolume(0, packed)
-            if rc == 0:
-                logger.info(f"Głośność ustawiona na {level}%")
-                return True
-            logger.error(f"waveOutSetVolume rc={rc}")
-        except Exception as e:
-            logger.error(f"Nie udało się ustawić głośności: {e}")
-        return False
 
     # ─── Tapeta ─────────────────────────────────────────────────
 

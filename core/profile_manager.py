@@ -8,7 +8,6 @@ Aktywny profil zapamiętywany jest w data/active.json.
 import json
 import os
 import re
-import copy
 import logging
 from dataclasses import dataclass, field
 from typing import Optional
@@ -77,7 +76,7 @@ class Profile:
         # Odfiltruj przestarzałe akcje (power_plan, kill_process)
         actions = [
             a for a in data.get("actions", [])
-            if a.get("type") not in {"set_power_plan", "kill_process"}
+            if a.get("type") not in {"set_power_plan", "kill_process", "set_volume"}
         ]
         return cls(
             name=data.get("name", "Bez nazwy"),
@@ -234,29 +233,6 @@ class ProfileManager(QObject):
         self._save_active()
         self.profilesUpdated.emit()
 
-    def duplicate_profile(self, name: str) -> Optional[Profile]:
-        for p in self.profiles:
-            if p.name == name:
-                new_name = f"{p.name} (kopia)"
-                counter = 2
-                existing = {pp.name for pp in self.profiles}
-                while new_name in existing:
-                    new_name = f"{p.name} (kopia {counter})"
-                    counter += 1
-                new_profile = Profile(
-                    name=new_name,
-                    icon=p.icon,
-                    color=p.color,
-                    description=p.description,
-                    actions=copy.deepcopy(p.actions),
-                    blocked_sites=copy.deepcopy(p.blocked_sites),
-                    locked=p.locked,
-                    password_hash=p.password_hash,
-                )
-                self.add_profile(new_profile)
-                return new_profile
-        return None
-
     def get_profile(self, name: str) -> Optional[Profile]:
         for p in self.profiles:
             if p.name == name:
@@ -267,7 +243,6 @@ class ProfileManager(QObject):
 
     def _capture_state(self) -> dict:
         return {
-            "volume": SystemController.get_volume(),
             "wallpaper": SystemController.get_wallpaper(),
             "dark_theme": SystemController.get_theme(),
         }
@@ -310,8 +285,6 @@ class ProfileManager(QObject):
 
         state = self._previous_state
         if state:
-            if "volume" in state:
-                SystemController.set_volume(state["volume"])
             if "wallpaper" in state and state["wallpaper"]:
                 SystemController.set_wallpaper(state["wallpaper"])
             if "dark_theme" in state:
@@ -348,9 +321,8 @@ class ProfileManager(QObject):
                 name="Praca",
                 icon="🏢",
                 color="#3b82f6",
-                description="Skup się na pracy – wyłącz rozpraszacze, ciemny motyw, niska głośność.",
+                description="Skup się na pracy – wyłącz rozpraszacze, ciemny motyw.",
                 actions=[
-                    {"type": "set_volume", "level": 30},
                     {"type": "set_theme", "dark": True},
                 ],
             ),
@@ -358,9 +330,8 @@ class ProfileManager(QObject):
                 name="Nauka",
                 icon="📚",
                 color="#10b981",
-                description="Tryb nauki – skupienie, cisza, jasny motyw.",
+                description="Tryb nauki – skupienie, jasny motyw.",
                 actions=[
-                    {"type": "set_volume", "level": 20},
                     {"type": "set_theme", "dark": False},
                 ],
             ),
@@ -368,9 +339,8 @@ class ProfileManager(QObject):
                 name="Rozrywka",
                 icon="🎬",
                 color="#f59e0b",
-                description="Czas na relaks – głośna muzyka, ciemny motyw.",
+                description="Czas na relaks – ciemny motyw.",
                 actions=[
-                    {"type": "set_volume", "level": 80},
                     {"type": "set_theme", "dark": True},
                 ],
             ),

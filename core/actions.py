@@ -82,38 +82,6 @@ class LaunchAppAction(Action):
         return f"🚀 Uruchom: {self.label or self.path}"
 
 
-class SetVolumeAction(Action):
-    """Ustaw głośność systemową."""
-
-    action_type = "set_volume"
-
-    def __init__(self, level: int):
-        self.level = max(0, min(100, level))
-        self._previous_level: Optional[int] = None
-
-    def execute(self) -> bool:
-        self._previous_level = SystemController.get_volume()
-        return SystemController.set_volume(self.level)
-
-    def undo(self) -> bool:
-        if self._previous_level is not None:
-            return SystemController.set_volume(self._previous_level)
-        return True
-
-    def to_dict(self) -> dict:
-        return {
-            "type": self.action_type,
-            "level": self.level,
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict) -> "SetVolumeAction":
-        return cls(level=data["level"])
-
-    def get_description(self) -> str:
-        return f"🔊 Głośność: {self.level}%"
-
-
 class SetWallpaperAction(Action):
     """Zmień tapetę pulpitu."""
 
@@ -225,7 +193,6 @@ class BlockProcessAction(Action):
 
 ACTION_REGISTRY: dict[str, type[Action]] = {
     "launch_app": LaunchAppAction,
-    "set_volume": SetVolumeAction,
     "set_wallpaper": SetWallpaperAction,
     "set_theme": SetThemeAction,
     "block_process": BlockProcessAction,

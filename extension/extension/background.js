@@ -8,7 +8,7 @@
 
 const SERVER_URL = "http://localhost:8765";
 const SYNC_ALARM = "sync-blocked";
-const SYNC_INTERVAL_MIN = 0.5; // 30 sekund
+const SYNC_INTERVAL_MIN = 0.16666667; // 10 sekund
 
 // ---------------------------------------------------------------------------
 // Cache lokalny (żeby popup miał co pokazać nawet jeśli serwer chwilowo pada)

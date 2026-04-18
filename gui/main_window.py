@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 
 from core.profile_manager import ProfileManager, Profile
 from core.scheduler import Scheduler
-from gui.profile_card import ProfileCard
+from gui.profile_card import ProfileCard, _hex_to_rgba
 from gui.profile_editor import ProfileEditorDialog
 from gui.schedule_widget import WeeklyCalendarWidget
 
@@ -165,7 +165,7 @@ class MainWindow(QMainWindow):
             "Context Switcher Pro to samo-enforsujący się planer dnia.\n"
             "Jednym kliknięciem przełącz swoje środowisko między trybami pracy.\n\n"
             "Funkcje:\n"
-            "• Zarządzanie profilami (głośność, tapeta, motyw, uruchamianie/zamykanie aplikacji)\n"
+            "• Zarządzanie profilami (tapeta, motyw, uruchamianie/zamykanie aplikacji)\n"
             "• Automatyczne przełączanie wg harmonogramu tygodniowego\n"
             "• Blokowanie rozpraszaczy – wybrane aplikacje będą zamykane gdy profil aktywny"
         )
@@ -256,12 +256,12 @@ class MainWindow(QMainWindow):
                 description=profile.description,
                 actions_count=len(profile.actions),
                 actions=profile.actions,
+                blocked_sites=profile.blocked_sites,
                 is_active=(profile.name == active_name),
             )
             card.switchClicked.connect(self._on_card_switch)
             card.editClicked.connect(self._on_card_edit)
             card.deleteClicked.connect(self._on_card_delete)
-            card.duplicateClicked.connect(self._on_card_duplicate)
             self.cards_layout.addWidget(card)
 
         add_btn = QPushButton("  ➕  Nowy profil")
@@ -315,9 +315,6 @@ class MainWindow(QMainWindow):
             self.profile_manager.delete_profile(name)
             self.scheduler.clear_blocks_for_profile(name)
 
-    def _on_card_duplicate(self, name: str):
-        self.profile_manager.duplicate_profile(name)
-
     def _on_add_profile(self):
         dialog = ProfileEditorDialog(parent=self)
         dialog.profileSaved.connect(self._save_new_profile)
@@ -338,11 +335,13 @@ class MainWindow(QMainWindow):
             profile = self.profile_manager.get_profile(name)
             if profile:
                 self.active_badge.setText(f"{profile.icon} {profile.name}")
+                bg = _hex_to_rgba(profile.color, 38)
+                border = _hex_to_rgba(profile.color, 160)
                 self.active_badge.setStyleSheet(f"""
                     QLabel {{
-                        background: {profile.color}22;
+                        background: {bg};
                         color: {profile.color};
-                        border: 1px solid {profile.color};
+                        border: 1px solid {border};
                         border-radius: 8px;
                         padding: 8px 16px;
                         font-size: 13px;

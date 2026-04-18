@@ -17,16 +17,19 @@ def _hex_to_rgba(hex_color: str, alpha: int) -> str:
     return hex_color
 
 
-def _build_details_text(actions: list[dict]) -> list[str]:
+def _build_details_text(actions: list[dict], blocked_sites: list[str] = None) -> list[str]:
     """Zwróć listę czytelnych linii opisu akcji profilu."""
     lines = []
     blocked = []
     for a in actions:
         t = a.get("type", "")
-        if t == "set_volume":
-            lines.append(f"🔊  Głośność: {a.get('level', '?')}%")
-        elif t == "set_theme":
+        if t == "set_theme":
             lines.append("🌙  Motyw: ciemny" if a.get("dark", True) else "☀️  Motyw: jasny")
+        elif t == "set_wallpaper":
+            import os
+            name = os.path.basename(a.get("image_path", "") or "")
+            if name:
+                lines.append(f"🖼️  Tapeta: {name}")
         elif t == "block_process":
             blocked.append(a.get("display_name") or a.get("process_name", "?"))
         elif t == "launch_app":
@@ -36,7 +39,12 @@ def _build_details_text(actions: list[dict]) -> list[str]:
         preview = ", ".join(blocked[:3])
         if len(blocked) > 3:
             preview += f"  (+{len(blocked) - 3})"
-        lines.append(f"🚫  Blokuje: {preview}")
+        lines.append(f"🚫  Blokuje aplikacje: {preview}")
+    if blocked_sites:
+        preview = ", ".join(blocked_sites[:3])
+        if len(blocked_sites) > 3:
+            preview += f"  (+{len(blocked_sites) - 3})"
+        lines.append(f"🌐  Blokuje strony: {preview}")
     return lines or ["Brak skonfigurowanych akcji"]
 
 
@@ -44,7 +52,6 @@ class ProfileCard(QFrame):
     switchClicked = Signal(str)
     editClicked = Signal(str)
     deleteClicked = Signal(str)
-    duplicateClicked = Signal(str)
 
     _COLLAPSED_H = 82
 
@@ -56,6 +63,7 @@ class ProfileCard(QFrame):
         description: str = "",
         actions_count: int = 0,
         actions: list[dict] = None,
+        blocked_sites: list[str] = None,
         is_active: bool = False,
         parent=None,
     ):
@@ -70,10 +78,10 @@ class ProfileCard(QFrame):
         self.setFixedHeight(self._COLLAPSED_H)
 
         self._setup_ui(name, icon, color, description, actions_count,
-                       actions or [], is_active)
+                       actions or [], blocked_sites or [], is_active)
 
     def _setup_ui(self, name, icon, color, description, actions_count,
-                  actions, is_active):
+                  actions, blocked_sites, is_active):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
@@ -139,10 +147,6 @@ class ProfileCard(QFrame):
         edit_btn.clicked.connect(lambda: self.editClicked.emit(self.profile_name))
         btn_row.addWidget(edit_btn)
 
-        dup_btn = self._make_btn("⊔  Duplikuj", "#64748b")
-        dup_btn.clicked.connect(lambda: self.duplicateClicked.emit(self.profile_name))
-        btn_row.addWidget(dup_btn)
-
         del_btn = self._make_btn("✕  Usuń", "#ef4444")
         del_btn.clicked.connect(lambda: self.deleteClicked.emit(self.profile_name))
         btn_row.addWidget(del_btn)
@@ -168,7 +172,7 @@ class ProfileCard(QFrame):
         det_layout.setContentsMargins(62, 8, 14, 10)
         det_layout.setSpacing(3)
 
-        detail_lines = _build_details_text(actions)
+        detail_lines = _build_details_text(actions, blocked_sites)
         for line in detail_lines:
             lbl = QLabel(line)
             lbl.setStyleSheet(

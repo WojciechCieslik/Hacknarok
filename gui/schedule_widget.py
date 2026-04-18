@@ -364,12 +364,19 @@ class CalendarGrid(QWidget):
             profile_names=self.profile_names,
             parent=self,
         )
-        # Wycentruj dialog względem zaznaczenia
+        # Wycentruj dialog względem zaznaczenia, z clampem do ekranu
         col_w = self._col_width()
         gx = self.mapToGlobal(self.rect().topLeft()).x()
         gy = self.mapToGlobal(self.rect().topLeft()).y()
         dx = gx + TIME_W + self._drag_day * col_w + col_w // 2 - 170
         dy = gy + HEAD_H + slot_start * SLOT_H - 20
+
+        screen = self.screen()
+        if screen:
+            avail = screen.availableGeometry()
+            dx = max(avail.x(), min(dx, avail.x() + avail.width() - dlg.width()))
+            dy = max(avail.y(), min(dy, avail.y() + avail.height() - dlg.height()))
+
         dlg.move(dx, dy)
         dlg.exec()
         self.update()

@@ -1,7 +1,7 @@
 """
 ProfileEditor – dialog tworzenia i edycji profilu.
 
-Sekcje: podstawy, głośność, motyw, tapeta, zablokowane aplikacje.
+Sekcje: podstawy, motyw, tapeta, zablokowane aplikacje, strony www.
 """
 
 import hashlib
@@ -10,7 +10,7 @@ import os
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
-    QLabel, QLineEdit, QPushButton, QComboBox, QSlider,
+    QLabel, QLineEdit, QPushButton, QComboBox,
     QWidget, QCheckBox, QMessageBox, QScrollArea, QFrame,
     QFileDialog,
 )
@@ -80,8 +80,15 @@ class ProfileEditorDialog(QDialog):
     def __init__(self, profile: Profile = None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Edytuj profil" if profile else "Nowy profil")
-        self.setMinimumSize(640, 720)
-        self.resize(680, 820)
+        self.setMinimumSize(560, 480)
+        self.resize(640, 620)
+        if parent is not None:
+            screen = parent.screen() if hasattr(parent, "screen") else None
+            if screen is not None:
+                avail = screen.availableGeometry()
+                w = min(680, int(avail.width() * 0.9))
+                h = min(720, int(avail.height() * 0.85))
+                self.resize(w, h)
 
         self._editing = profile
         self._app_rows: list[tuple[QCheckBox, str, str]] = []
@@ -107,7 +114,6 @@ class ProfileEditorDialog(QDialog):
         cl.setSpacing(12)
 
         cl.addWidget(self._section_basics(profile))
-        cl.addWidget(self._section_volume(profile))
         cl.addWidget(self._section_theme(profile))
         cl.addWidget(self._section_wallpaper(profile))
         cl.addWidget(self._section_apps(profile))
@@ -190,51 +196,6 @@ class ProfileEditorDialog(QDialog):
         form.addRow("Kolor:", self.color_combo)
 
         layout.addLayout(form)
-        return frame
-
-    # ─── Sekcja: Głośność ────────────────────────────────────────
-
-    def _section_volume(self, profile: Profile = None) -> QFrame:
-        frame, layout = self._make_section("🔊  Głośność")
-
-        existing_level: int | None = None
-        if profile:
-            for a in profile.actions:
-                if a.get("type") == "set_volume":
-                    existing_level = a.get("level", 50)
-                    break
-
-        self.volume_enabled_cb = QCheckBox("Ustaw głośność przy aktywacji profilu")
-        self.volume_enabled_cb.setChecked(existing_level is not None)
-        self.volume_enabled_cb.stateChanged.connect(
-            lambda s: self._vol_widget.setVisible(bool(s))
-        )
-        layout.addWidget(self.volume_enabled_cb)
-
-        self._vol_widget = QWidget()
-        vl = QHBoxLayout(self._vol_widget)
-        vl.setContentsMargins(0, 4, 0, 0)
-
-        mute_lbl = QLabel("0%")
-        mute_lbl.setStyleSheet("color: #64748b; font-size: 11px;")
-        vl.addWidget(mute_lbl)
-
-        self._vol_slider = QSlider(Qt.Orientation.Horizontal)
-        self._vol_slider.setRange(0, 100)
-        self._vol_slider.setValue(existing_level if existing_level is not None else 50)
-        vl.addWidget(self._vol_slider, 1)
-
-        self._vol_label = QLabel(f"{self._vol_slider.value()}%")
-        self._vol_label.setFixedWidth(40)
-        self._vol_label.setStyleSheet("color: #f1f5f9; font-size: 13px; font-weight: bold;")
-        self._vol_slider.valueChanged.connect(
-            lambda v: self._vol_label.setText(f"{v}%")
-        )
-        vl.addWidget(self._vol_label)
-
-        layout.addWidget(self._vol_widget)
-        self._vol_widget.setVisible(self.volume_enabled_cb.isChecked())
-
         return frame
 
     # ─── Sekcja: Motyw ───────────────────────────────────────────
@@ -606,15 +567,17 @@ class ProfileEditorDialog(QDialog):
         )
         rl.addWidget(lbl, 1)
 
-        del_btn = QPushButton("✕")
-        del_btn.setFixedSize(24, 24)
+        del_btn = QPushButton("🗑  Usuń")
+        del_btn.setFixedHeight(28)
+        del_btn.setMinimumWidth(82)
         del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         del_btn.setStyleSheet("""
             QPushButton {
-                background: #0f172a;
-                color: #64748b;
-                border: 1px solid #334155;
-                border-radius: 12px;
+                background: rgba(239, 68, 68, 0.12);
+                color: #fca5a5;
+                border: 1px solid rgba(239, 68, 68, 0.35);
+                border-radius: 6px;
+                padding: 2px 10px;
                 font-size: 11px;
                 font-weight: bold;
             }
@@ -622,6 +585,9 @@ class ProfileEditorDialog(QDialog):
                 background: #ef4444;
                 color: #fff;
                 border-color: #ef4444;
+            }
+            QPushButton:pressed {
+                background: #dc2626;
             }
         """)
         del_btn.clicked.connect(lambda: self._remove_site_row(site, row))
@@ -669,9 +635,6 @@ class ProfileEditorDialog(QDialog):
 
         actions: list[dict] = []
 
-        if self.volume_enabled_cb.isChecked():
-            actions.append({"type": "set_volume", "level": self._vol_slider.value()})
-
         if self.theme_enabled_cb.isChecked():
             actions.append({
                 "type": "set_theme",
@@ -693,7 +656,7 @@ class ProfileEditorDialog(QDialog):
 
         # Zachowaj pozostałe akcje nie obsługiwane przez preset (np. launch_app)
         if self._editing:
-            preset_types = {"set_volume", "set_theme", "set_wallpaper", "block_process"}
+            preset_types = {"set_theme", "set_wallpaper", "block_process"}
             for a in self._editing.actions:
                 if a.get("type") not in preset_types:
                     actions.append(a)
