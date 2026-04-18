@@ -1,0 +1,32 @@
+{
+  "name": "Nauka Cyfrówki",
+  "icon": "📚",
+  "color": "#3b82f6",
+  "description": "",
+  "actions": [
+    {
+      "level": 79,
+      "type": "set_volume"
+    },
+    {
+      "dark": true,
+      "type": "set_theme"
+    },
+    {
+      "display_name": "Google Chrome",
+      "process_name": "chrome.exe",
+      "type": "block_process"
+    },
+    {
+      "display_name": "Mozilla Firefox",
+      "process_name": "firefox.exe",
+      "type": "block_process"
+    },
+    {
+      "display_name": "Spotify",
+      "process_name": "Spotify.exe",
+      "type": "block_process"
+    }
+  ],
+  "notifications_enabled": true
+}

@@ -480,15 +480,30 @@ QToolTip {{
 QFrame#cardFrame {{
     background-color: {COLORS["bg_card"]};
     border: 1px solid {COLORS["border"]};
-    border-radius: 16px;
-    padding: 16px;
+    border-radius: 12px;
 }}
 
 QFrame#activeCardFrame {{
     background-color: {COLORS["bg_card"]};
     border: 2px solid {COLORS["accent_purple"]};
-    border-radius: 16px;
-    padding: 16px;
+    border-radius: 12px;
+}}
+
+QPushButton#profileAddButton {{
+    background: transparent;
+    border: 2px dashed {COLORS["border"]};
+    color: {COLORS["text_muted"]};
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 500;
+    text-align: left;
+    padding-left: 16px;
+}}
+
+QPushButton#profileAddButton:hover {{
+    border-color: {COLORS["accent_purple"]};
+    color: {COLORS["accent_purple"]};
+    background: rgba(124, 58, 237, 0.05);
 }}
 
 QFrame#overloadFrame {{

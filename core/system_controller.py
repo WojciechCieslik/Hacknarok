@@ -243,6 +243,85 @@ class SystemController:
             logger.error(f"Nie udało się pobrać listy procesów: {e}")
             return []
 
+    @staticmethod
+    def get_apps_with_windows() -> list[dict]:
+        """Pobierz listę aplikacji z widocznymi oknami (do pickera blokad)."""
+        try:
+            import psutil
+            import win32gui
+            import win32process
+
+            pids_to_title: dict[int, str] = {}
+
+            def _callback(hwnd, _):
+                if win32gui.IsWindowVisible(hwnd):
+                    title = win32gui.GetWindowText(hwnd)
+                    if title:
+                        try:
+                            _, pid = win32process.GetWindowThreadProcessId(hwnd)
+                            if pid not in pids_to_title:
+                                pids_to_title[pid] = title
+                        except Exception:
+                            pass
+
+            win32gui.EnumWindows(_callback, None)
+
+            apps = []
+            seen: set[str] = set()
+            for pid, title in pids_to_title.items():
+                try:
+                    proc = psutil.Process(pid)
+                    name = proc.name()
+                    key = name.lower()
+                    if key not in seen:
+                        seen.add(key)
+                        apps.append({"process_name": name, "display_name": title})
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+
+            return sorted(apps, key=lambda x: x["display_name"].lower())
+        except Exception as e:
+            logger.error(f"Nie udało się pobrać listy aplikacji: {e}")
+            return []
+
+    @staticmethod
+    def suspend_process(process_name: str) -> bool:
+        """Zawieś (zamroź) wszystkie procesy o danej nazwie."""
+        try:
+            import psutil
+            suspended = 0
+            for proc in psutil.process_iter(['name']):
+                try:
+                    if proc.info['name'] and proc.info['name'].lower() == process_name.lower():
+                        proc.suspend()
+                        suspended += 1
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+            logger.info(f"Zawieszono {suspended} proces(ów) '{process_name}'")
+            return suspended > 0
+        except Exception as e:
+            logger.error(f"Nie udało się zawiesić procesu {process_name}: {e}")
+            return False
+
+    @staticmethod
+    def resume_process(process_name: str) -> bool:
+        """Wznów zawieszone procesy o danej nazwie."""
+        try:
+            import psutil
+            resumed = 0
+            for proc in psutil.process_iter(['name']):
+                try:
+                    if proc.info['name'] and proc.info['name'].lower() == process_name.lower():
+                        proc.resume()
+                        resumed += 1
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+            logger.info(f"Wznowiono {resumed} proces(ów) '{process_name}'")
+            return resumed > 0
+        except Exception as e:
+            logger.error(f"Nie udało się wznowić procesu {process_name}: {e}")
+            return False
+
     # ─── Aktywne okno ───────────────────────────────────────────
 
     @staticmethod

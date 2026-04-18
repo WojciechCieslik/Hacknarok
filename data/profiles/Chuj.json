@@ -1,0 +1,21 @@
+{
+  "name": "Chuj",
+  "icon": "🏢",
+  "color": "#3b82f6",
+  "description": "",
+  "actions": [
+    {
+      "level": 23,
+      "type": "set_volume"
+    },
+    {
+      "image_path": "C:/Users/micha/Desktop/basiagrill.png",
+      "type": "set_wallpaper"
+    },
+    {
+      "process_name": "",
+      "type": "kill_process"
+    }
+  ],
+  "notifications_enabled": true
+}

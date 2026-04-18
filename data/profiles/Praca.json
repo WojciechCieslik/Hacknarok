@@ -1,0 +1,17 @@
+{
+  "name": "Praca",
+  "icon": "🏢",
+  "color": "#3b82f6",
+  "description": "Skup się na pracy – wyłącz rozpraszacze, ciemny motyw, niska głośność.",
+  "actions": [
+    {
+      "type": "set_volume",
+      "level": 30
+    },
+    {
+      "type": "set_theme",
+      "dark": true
+    }
+  ],
+  "notifications_enabled": true
+}

@@ -1,11 +1,13 @@
 """
 ProfileManager – zarządzanie profilami.
 
-CRUD profili, zapis/odczyt JSON, przełączanie z zachowaniem poprzedniego stanu.
+Każdy profil przechowywany jest jako oddzielny plik JSON w data/profiles/.
+Aktywny profil zapamiętywany jest w data/active.json.
 """
 
 import json
 import os
+import re
 import copy
 import logging
 from dataclasses import dataclass, field
@@ -19,7 +21,19 @@ from core.system_controller import SystemController
 logger = logging.getLogger(__name__)
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
-PROFILES_FILE = os.path.join(DATA_DIR, "profiles.json")
+PROFILES_DIR = os.path.join(DATA_DIR, "profiles")
+ACTIVE_FILE = os.path.join(DATA_DIR, "active.json")
+LEGACY_FILE = os.path.join(DATA_DIR, "profiles.json")  # stary format – migracja
+
+
+def _safe_filename(name: str) -> str:
+    """Zamień nazwę profilu na bezpieczną nazwę pliku (Windows)."""
+    safe = re.sub(r'[\\/:*?"<>|]', "_", name).strip()
+    return safe or "profil"
+
+
+def _profile_path(name: str) -> str:
+    return os.path.join(PROFILES_DIR, f"{_safe_filename(name)}.json")
 
 
 @dataclass
@@ -30,9 +44,9 @@ class Profile:
     color: str = "#7c3aed"
     description: str = ""
     actions: list[dict] = field(default_factory=list)
+    notifications_enabled: bool = True
 
     def get_actions(self) -> list[Action]:
-        """Zwróć zdeserializowane obiekty akcji."""
         result = []
         for a_dict in self.actions:
             try:
@@ -48,6 +62,7 @@ class Profile:
             "color": self.color,
             "description": self.description,
             "actions": self.actions,
+            "notifications_enabled": self.notifications_enabled,
         }
 
     @classmethod
@@ -58,14 +73,16 @@ class Profile:
             color=data.get("color", "#7c3aed"),
             description=data.get("description", ""),
             actions=data.get("actions", []),
+            notifications_enabled=data.get("notifications_enabled", True),
         )
 
 
 class ProfileManager(QObject):
     """Menedżer profili – ładowanie, zapis, przełączanie."""
 
-    profileChanged = Signal(str)  # nazwa aktywnego profilu
-    profilesUpdated = Signal()    # lista profili się zmieniła
+    profileChanged = Signal(str)
+    profilesUpdated = Signal()
+    blockedAppDetected = Signal(str, str)  # process_name, profile_name
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -73,74 +90,152 @@ class ProfileManager(QObject):
         self.active_profile: Optional[Profile] = None
         self._previous_state: dict = {}
         self._blocked_processes: list[str] = []
+        self.manual_override: bool = False  # ▶ clicked by user → scheduler skips
         self.load()
 
     # ─── Zapis / Odczyt ─────────────────────────────────────────
 
     def load(self):
-        """Wczytaj profile z pliku JSON."""
-        os.makedirs(DATA_DIR, exist_ok=True)
-        if os.path.exists(PROFILES_FILE):
+        """Wczytaj profile – migruje stary format jeśli potrzeba."""
+        os.makedirs(PROFILES_DIR, exist_ok=True)
+
+        if os.path.exists(LEGACY_FILE):
+            self._migrate_legacy()
+            return
+
+        # Wczytaj wszystkie pliki z katalogu profiles/
+        self.profiles = []
+        for filename in sorted(os.listdir(PROFILES_DIR)):
+            if not filename.endswith(".json"):
+                continue
+            filepath = os.path.join(PROFILES_DIR, filename)
             try:
-                with open(PROFILES_FILE, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                self.profiles = [Profile.from_dict(p) for p in data.get("profiles", [])]
-                logger.info(f"Wczytano {len(self.profiles)} profil(i)")
+                with open(filepath, "r", encoding="utf-8") as f:
+                    self.profiles.append(Profile.from_dict(json.load(f)))
             except Exception as e:
-                logger.error(f"Błąd wczytywania profili: {e}")
-                self.profiles = []
-        else:
+                logger.error(f"Błąd wczytywania profilu {filename}: {e}")
+
+        if not self.profiles:
             self._create_defaults()
-            self.save()
+            self._save_all_files()
+
+        # Wczytaj aktywny profil
+        active_name = self._load_active_name()
+        if active_name:
+            self.active_profile = self.get_profile(active_name)
+
+        logger.info(f"Wczytano {len(self.profiles)} profil(i)")
+
+    def _load_active_name(self) -> Optional[str]:
+        if not os.path.exists(ACTIVE_FILE):
+            return None
+        try:
+            with open(ACTIVE_FILE, "r", encoding="utf-8") as f:
+                return json.load(f).get("active")
+        except Exception:
+            return None
+
+    def _save_active(self):
+        try:
+            with open(ACTIVE_FILE, "w", encoding="utf-8") as f:
+                json.dump(
+                    {"active": self.active_profile.name if self.active_profile else None},
+                    f, ensure_ascii=False,
+                )
+        except Exception as e:
+            logger.error(f"Błąd zapisu active.json: {e}")
+
+    def _write_profile_file(self, profile: Profile):
+        try:
+            with open(_profile_path(profile.name), "w", encoding="utf-8") as f:
+                json.dump(profile.to_dict(), f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"Błąd zapisu profilu '{profile.name}': {e}")
+
+    def _delete_profile_file(self, name: str):
+        path = _profile_path(name)
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+        except Exception as e:
+            logger.error(f"Błąd usuwania pliku profilu '{name}': {e}")
+
+    def _save_all_files(self):
+        """Zapisz wszystkie profile (używane przy inicjalizacji)."""
+        os.makedirs(PROFILES_DIR, exist_ok=True)
+        for profile in self.profiles:
+            self._write_profile_file(profile)
+        self._save_active()
 
     def save(self):
-        """Zapisz profile do pliku JSON."""
-        os.makedirs(DATA_DIR, exist_ok=True)
+        """Alias zachowany dla kompatybilności – zapisuje aktywny profil."""
+        self._save_active()
+
+    def _migrate_legacy(self):
+        """Przeprowadź migrację z profiles.json do osobnych plików."""
+        logger.info("Migracja profiles.json → data/profiles/...")
         try:
-            data = {
-                "profiles": [p.to_dict() for p in self.profiles],
-                "active": self.active_profile.name if self.active_profile else None,
-            }
-            with open(PROFILES_FILE, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-            logger.info("Profile zapisane")
+            with open(LEGACY_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            self.profiles = [Profile.from_dict(p) for p in data.get("profiles", [])]
+            active_name = data.get("active")
+
+            os.makedirs(PROFILES_DIR, exist_ok=True)
+            self._save_all_files()
+
+            if active_name:
+                self.active_profile = self.get_profile(active_name)
+                self._save_active()
+
+            # Zmień nazwę starego pliku na backup
+            os.rename(LEGACY_FILE, LEGACY_FILE + ".bak")
+            logger.info(f"Migracja zakończona. Backup: {LEGACY_FILE}.bak")
         except Exception as e:
-            logger.error(f"Błąd zapisu profili: {e}")
+            logger.error(f"Błąd migracji: {e}")
+            self._create_defaults()
+            self._save_all_files()
 
     # ─── CRUD ────────────────────────────────────────────────────
 
     def add_profile(self, profile: Profile):
-        """Dodaj nowy profil."""
         self.profiles.append(profile)
-        self.save()
+        self._write_profile_file(profile)
+        self._save_active()
         self.profilesUpdated.emit()
 
-    def update_profile(self, name: str, updated: Profile):
-        """Aktualizuj istniejący profil."""
+    def update_profile(self, old_name: str, updated: Profile) -> bool:
         for i, p in enumerate(self.profiles):
-            if p.name == name:
+            if p.name == old_name:
+                # Jeśli zmieniono nazwę – usuń stary plik
+                if old_name != updated.name:
+                    self._delete_profile_file(old_name)
+                    # Zaktualizuj referencję do aktywnego profilu
+                    if self.active_profile and self.active_profile.name == old_name:
+                        self.active_profile = updated
                 self.profiles[i] = updated
-                self.save()
+                self._write_profile_file(updated)
+                self._save_active()
                 self.profilesUpdated.emit()
                 return True
         return False
 
     def delete_profile(self, name: str):
-        """Usuń profil."""
+        self._delete_profile_file(name)
         self.profiles = [p for p in self.profiles if p.name != name]
         if self.active_profile and self.active_profile.name == name:
-            self.deactivate_profile()
-        self.save()
+            self._stop_blocking()
+            self.active_profile = None
+            self._previous_state = {}
+        self._save_active()
         self.profilesUpdated.emit()
 
     def duplicate_profile(self, name: str) -> Optional[Profile]:
-        """Duplikuj profil."""
         for p in self.profiles:
             if p.name == name:
                 new_name = f"{p.name} (kopia)"
                 counter = 2
-                existing_names = {pp.name for pp in self.profiles}
-                while new_name in existing_names:
+                existing = {pp.name for pp in self.profiles}
+                while new_name in existing:
                     new_name = f"{p.name} (kopia {counter})"
                     counter += 1
                 new_profile = Profile(
@@ -149,13 +244,13 @@ class ProfileManager(QObject):
                     color=p.color,
                     description=p.description,
                     actions=copy.deepcopy(p.actions),
+                    notifications_enabled=p.notifications_enabled,
                 )
                 self.add_profile(new_profile)
                 return new_profile
         return None
 
     def get_profile(self, name: str) -> Optional[Profile]:
-        """Pobierz profil po nazwie."""
         for p in self.profiles:
             if p.name == name:
                 return p
@@ -164,7 +259,6 @@ class ProfileManager(QObject):
     # ─── Przełączanie ────────────────────────────────────────────
 
     def _capture_state(self) -> dict:
-        """Zrób snapshot aktualnego stanu systemu."""
         return {
             "volume": SystemController.get_volume(),
             "wallpaper": SystemController.get_wallpaper(),
@@ -172,45 +266,38 @@ class ProfileManager(QObject):
             "power_plan_guid": SystemController.get_active_power_plan(),
         }
 
-    def switch_profile(self, profile_name: str) -> bool:
-        """Przełącz na wybrany profil."""
+    def switch_profile(self, profile_name: str, manual: bool = False) -> bool:
         profile = self.get_profile(profile_name)
         if not profile:
             logger.error(f"Profil '{profile_name}' nie znaleziony")
             return False
 
-        # Dezaktywuj bieżący profil (blokady)
         if self.active_profile:
             self._stop_blocking()
 
-        # Snapshot przed zmianą
         self._previous_state = self._capture_state()
 
-        # Wykonaj akcje profilu
-        actions = profile.get_actions()
-        for action in actions:
+        for action in profile.get_actions():
             try:
                 action.execute()
-                # Zbierz procesy do blokowania
                 if isinstance(action, BlockProcessAction):
                     self._blocked_processes.append(action.process_name)
             except Exception as e:
                 logger.error(f"Błąd wykonywania akcji {action.get_description()}: {e}")
 
         self.active_profile = profile
-        self.save()
+        self.manual_override = manual
+        self._save_active()
         self.profileChanged.emit(profile.name)
         logger.info(f"Przełączono na profil: {profile.name}")
         return True
 
     def deactivate_profile(self):
-        """Dezaktywuj bieżący profil i przywróć poprzedni stan."""
         if not self.active_profile:
             return
 
         self._stop_blocking()
 
-        # Przywróć poprzedni stan
         state = self._previous_state
         if state:
             if "volume" in state:
@@ -224,27 +311,44 @@ class ProfileManager(QObject):
 
         self.active_profile = None
         self._previous_state = {}
-        self.save()
+        self.manual_override = False
+        self._save_active()
         self.profileChanged.emit("")
         logger.info("Profil dezaktywowany – stan przywrócony")
 
     def _stop_blocking(self):
-        """Wyłącz blokowanie procesów."""
+        for proc_name in self._blocked_processes:
+            SystemController.resume_process(proc_name)
         self._blocked_processes.clear()
 
     def get_blocked_processes(self) -> list[str]:
-        """Pobierz listę aktywnie blokowanych procesów."""
         return list(self._blocked_processes)
 
     def enforce_blocks(self):
-        """Wymuś blokady – zabij zablokowane procesy (wywoływane przez timer)."""
+        """Zawieś zablokowane procesy; emituje sygnał gdy coś nowego zostało zawieszone."""
+        try:
+            import psutil
+        except ImportError:
+            return
+
+        profile_name = self.active_profile.name if self.active_profile else ""
         for proc_name in self._blocked_processes:
-            SystemController.kill_process(proc_name)
+            newly_suspended = False
+            for proc in psutil.process_iter(['name', 'status']):
+                try:
+                    if (proc.info['name']
+                            and proc.info['name'].lower() == proc_name.lower()
+                            and proc.status() != psutil.STATUS_STOPPED):
+                        proc.suspend()
+                        newly_suspended = True
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+            if newly_suspended:
+                self.blockedAppDetected.emit(proc_name, profile_name)
 
     # ─── Profile domyślne ────────────────────────────────────────
 
     def _create_defaults(self):
-        """Utwórz domyślne profile."""
         self.profiles = [
             Profile(
                 name="Praca",

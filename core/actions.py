@@ -247,38 +247,44 @@ class SetPowerPlanAction(Action):
 
 
 class BlockProcessAction(Action):
-    """Blokuj proces (zabijaj wielokrotnie)."""
+    """Blokuj proces – zawiesza go zamiast zabijać."""
 
     action_type = "block_process"
 
-    def __init__(self, process_name: str):
+    def __init__(self, process_name: str, display_name: str = ""):
         self.process_name = process_name
+        self.display_name = display_name or process_name
         self.active = False
 
     def execute(self) -> bool:
         self.active = True
-        # Pierwsze zabicie – dalsze zabijanie przez monitor
-        SystemController.kill_process(self.process_name)
-        logger.info(f"Blokowanie aktywne dla: {self.process_name}")
+        SystemController.suspend_process(self.process_name)
+        logger.info(f"Blokowanie (zawieszenie) aktywne dla: {self.process_name}")
         return True
 
     def undo(self) -> bool:
         self.active = False
-        logger.info(f"Blokowanie wyłączone dla: {self.process_name}")
+        SystemController.resume_process(self.process_name)
+        logger.info(f"Blokowanie wyłączone, wznowiono: {self.process_name}")
         return True
 
     def to_dict(self) -> dict:
         return {
             "type": self.action_type,
             "process_name": self.process_name,
+            "display_name": self.display_name,
         }
 
     @classmethod
     def from_dict(cls, data: dict) -> "BlockProcessAction":
-        return cls(process_name=data["process_name"])
+        return cls(
+            process_name=data["process_name"],
+            display_name=data.get("display_name", ""),
+        )
 
     def get_description(self) -> str:
-        return f"🚫 Blokuj: {self.process_name}"
+        label = self.display_name if self.display_name != self.process_name else self.process_name
+        return f"🚫 Blokuj: {label}"
 
 
 # ─── Rejestr akcji (factory) ────────────────────────────────────

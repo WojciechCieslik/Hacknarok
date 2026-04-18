@@ -18,8 +18,9 @@ from core.scheduler import Scheduler
 from core.overload_monitor import OverloadMonitor
 from gui.profile_card import ProfileCard
 from gui.profile_editor import ProfileEditorDialog
-from gui.schedule_widget import ScheduleWidget
+from gui.schedule_widget import WeeklyCalendarWidget
 from gui.overload_widget import OverloadWidget
+from gui.blocked_dialog import BlockedAppNotification
 
 
 class MainWindow(QMainWindow):
@@ -39,7 +40,9 @@ class MainWindow(QMainWindow):
         # Połączenia sygnałów
         self.profile_manager.profileChanged.connect(self._on_profile_changed)
         self.profile_manager.profilesUpdated.connect(self._refresh_profiles)
+        self.profile_manager.blockedAppDetected.connect(self._on_blocked_app)
         self.scheduler.scheduleTriggered.connect(self._on_schedule_trigger)
+        self._active_block_notification: BlockedAppNotification | None = None
 
         # Timer blokady procesów (co 5s)
         self._block_timer = QTimer(self)
@@ -92,10 +95,10 @@ class MainWindow(QMainWindow):
         self.cards_scroll.setStyleSheet("QScrollArea { border: none; }")
 
         self.cards_container = QWidget()
-        self.cards_layout = QHBoxLayout(self.cards_container)
+        self.cards_layout = QVBoxLayout(self.cards_container)
         self.cards_layout.setContentsMargins(0, 0, 0, 0)
-        self.cards_layout.setSpacing(16)
-        self.cards_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.cards_layout.setSpacing(8)
+        self.cards_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         self.cards_scroll.setWidget(self.cards_container)
         profiles_layout.addWidget(self.cards_scroll)
@@ -112,7 +115,7 @@ class MainWindow(QMainWindow):
         schedule_layout.setContentsMargins(0, 16, 0, 0)
 
         profile_names = [p.name for p in self.profile_manager.profiles]
-        self.schedule_widget = ScheduleWidget(self.scheduler, profile_names)
+        self.schedule_widget = WeeklyCalendarWidget(self.scheduler, profile_names)
         schedule_layout.addWidget(self.schedule_widget)
 
         self.tabs.addTab(schedule_tab, "📅 Harmonogram")
@@ -331,28 +334,31 @@ class MainWindow(QMainWindow):
             self.cards_layout.addWidget(card)
 
         # Przycisk dodawania
-        add_btn = QPushButton("➕\nNowy profil")
-        add_btn.setObjectName("addButton")
-        add_btn.setFixedSize(200, 200)
+        add_btn = QPushButton("  ➕  Nowy profil")
+        add_btn.setObjectName("profileAddButton")
+        add_btn.setFixedHeight(52)
+        add_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         add_btn.clicked.connect(self._on_add_profile)
         self.cards_layout.addWidget(add_btn)
 
         self.cards_layout.addStretch()
 
-        # Zaktualizuj schedule widget
-        profile_names = [p.name for p in self.profile_manager.profiles]
+        # Zaktualizuj harmonogram
         if hasattr(self, 'schedule_widget'):
+            profile_names = [p.name for p in self.profile_manager.profiles]
+            colors = {p.name: p.color for p in self.profile_manager.profiles}
             self.schedule_widget.update_profile_names(profile_names)
+            self.schedule_widget.update_profile_colors(colors)
 
     # ─── Handlery kart ────────────────────────────────────────────
 
     def _on_card_switch(self, name: str):
-        """Przełącz lub dezaktywuj profil."""
+        """Przełącz lub dezaktywuj profil (ręczne – nadpisuje harmonogram)."""
         if (self.profile_manager.active_profile
                 and self.profile_manager.active_profile.name == name):
             self.profile_manager.deactivate_profile()
         else:
-            self.profile_manager.switch_profile(name)
+            self.profile_manager.switch_profile(name, manual=True)
 
     def _on_card_edit(self, name: str):
         profile = self.profile_manager.get_profile(name)
@@ -373,6 +379,10 @@ class MainWindow(QMainWindow):
         )
         if reply == QMessageBox.StandardButton.Yes:
             self.profile_manager.delete_profile(name)
+            self.scheduler.blocks = [
+                b for b in self.scheduler.blocks if b.profile_name != name
+            ]
+            self.scheduler.save()
 
     def _on_card_duplicate(self, name: str):
         self.profile_manager.duplicate_profile(name)
@@ -413,7 +423,8 @@ class MainWindow(QMainWindow):
                     f"Przełączono na profil: {profile.icon} {profile.name}"
                 )
                 # Powiadomienie systemowe
-                if self.tray_icon.isSystemTrayAvailable():
+                if (profile.notifications_enabled
+                        and self.tray_icon.isSystemTrayAvailable()):
                     self.tray_icon.showMessage(
                         "Context Switcher Pro",
                         f"Aktywny profil: {profile.icon} {profile.name}",
@@ -437,8 +448,34 @@ class MainWindow(QMainWindow):
         self._refresh_profiles()
 
     def _on_schedule_trigger(self, profile_name: str):
-        """Harmonogram wywołał przełączenie."""
-        self.profile_manager.switch_profile(profile_name)
+        """Harmonogram wywołał przełączenie – ignoruj jeśli profil włączony ręcznie."""
+        if not self.profile_manager.manual_override:
+            self.profile_manager.switch_profile(profile_name)
+
+    def _on_blocked_app(self, proc_name: str, profile_name: str):
+        """Pokaż powiadomienie gdy zablokowana aplikacja zostaje zawieszona."""
+        profile = self.profile_manager.get_profile(profile_name)
+        if profile and not profile.notifications_enabled:
+            return
+        # Nie pokazuj jeśli poprzednie powiadomienie jest wciąż widoczne
+        if self._active_block_notification and self._active_block_notification.isVisible():
+            return
+        # Znajdź przyjazną nazwę aplikacji
+        display_name = proc_name
+        for _, pn, dn in getattr(self, "_last_block_rows", []):
+            if pn.lower() == proc_name.lower():
+                display_name = dn
+                break
+        # Szukaj też w akcjach profilu
+        if profile:
+            for a in profile.actions:
+                if (a.get("type") == "block_process"
+                        and a.get("process_name", "").lower() == proc_name.lower()):
+                    display_name = a.get("display_name", proc_name) or proc_name
+                    break
+        self._active_block_notification = BlockedAppNotification(
+            display_name, profile_name, self
+        )
 
     def _remove_override(self, process_name: str):
         self.monitor.remove_override(process_name)
