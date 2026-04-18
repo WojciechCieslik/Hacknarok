@@ -8,9 +8,10 @@ głośność, tapeta, motyw, plan zasilania, procesy, aktywne okno.
 import ctypes
 import os
 import subprocess
+import sys
 import winreg
 import logging
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List, Set
 
 logger = logging.getLogger(__name__)
 
@@ -20,44 +21,56 @@ class SystemController:
 
     # ─── Głośność ───────────────────────────────────────────────
 
-    @staticmethod
-    def _audio_endpoint_volume():
-        """Zwróć interfejs IAudioEndpointVolume (obsługuje różne wersje pycaw)."""
-        from ctypes import cast, POINTER
-        from comtypes import CLSCTX_ALL
-        from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
-
-        speakers = AudioUtilities.GetSpeakers()
-        # Stara pycaw zwraca IMMDevice (COM) → ma .Activate()
-        # Nowa pycaw opakowuje je w AudioDevice → trzeba użyć ._dev
-        device = speakers
-        if not hasattr(device, "Activate"):
-            device = getattr(device, "_dev", device)
-        interface = device.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-        return cast(interface, POINTER(IAudioEndpointVolume))
+    # Skrypt pycaw uruchamiany w osobnym procesie – segfault izolowany od głównej apki
+    _PYCAW_GET = (
+        "from pycaw.pycaw import AudioUtilities,IAudioEndpointVolume;"
+        "from comtypes import CLSCTX_ALL;from ctypes import cast,POINTER;"
+        "d=AudioUtilities.GetSpeakers();"
+        "i=d.Activate(IAudioEndpointVolume._iid_,CLSCTX_ALL,None);"
+        "v=cast(i,POINTER(IAudioEndpointVolume));"
+        "print(int(round(v.GetMasterVolumeLevelScalar()*100)))"
+    )
+    _PYCAW_SET = (
+        "import sys;from pycaw.pycaw import AudioUtilities,IAudioEndpointVolume;"
+        "from comtypes import CLSCTX_ALL;from ctypes import cast,POINTER;"
+        "d=AudioUtilities.GetSpeakers();"
+        "i=d.Activate(IAudioEndpointVolume._iid_,CLSCTX_ALL,None);"
+        "v=cast(i,POINTER(IAudioEndpointVolume));"
+        "v.SetMasterVolumeLevelScalar(float(sys.argv[1]),None)"
+    )
 
     @staticmethod
     def get_volume() -> int:
         """Pobierz aktualny poziom głośności (0-100)."""
         try:
-            vol = SystemController._audio_endpoint_volume()
-            return int(round(vol.GetMasterVolumeLevelScalar() * 100))
+            result = subprocess.run(
+                [sys.executable, "-c", SystemController._PYCAW_GET],
+                capture_output=True, text=True, timeout=4,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return int(result.stdout.strip())
         except Exception as e:
             logger.error(f"Nie udało się pobrać głośności: {e}")
-            return 50
+        return 50
 
     @staticmethod
     def set_volume(level: int) -> bool:
         """Ustaw głośność systemową (0-100)."""
         try:
             level = max(0, min(100, level))
-            vol = SystemController._audio_endpoint_volume()
-            vol.SetMasterVolumeLevelScalar(level / 100.0, None)
-            logger.info(f"Głośność ustawiona na {level}%")
-            return True
+            result = subprocess.run(
+                [sys.executable, "-c", SystemController._PYCAW_SET, str(level / 100.0)],
+                capture_output=True, text=True, timeout=4,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+            if result.returncode == 0:
+                logger.info(f"Głośność ustawiona na {level}%")
+                return True
+            logger.error(f"pycaw subprocess błąd: {result.stderr.strip()}")
         except Exception as e:
             logger.error(f"Nie udało się ustawić głośności: {e}")
-            return False
+        return False
 
     # ─── Tapeta ─────────────────────────────────────────────────
 
@@ -147,9 +160,13 @@ class SystemController:
                 continue
         return result.stdout.decode("ascii", errors="replace")
 
+    _cached_power_plans: Optional[List[dict]] = None
+
     @staticmethod
-    def get_power_plans() -> list[dict]:
+    def get_power_plans(force_refresh: bool = False) -> list[dict]:
         """Pobierz listę dostępnych planów zasilania."""
+        if SystemController._cached_power_plans is not None and not force_refresh:
+            return SystemController._cached_power_plans
         try:
             output = SystemController._run_cmd(["powercfg", "/list"])
             plans = []
@@ -170,10 +187,11 @@ class SystemController:
                             "name": name,
                             "active": is_active
                         })
+            SystemController._cached_power_plans = plans
             return plans
         except Exception as e:
             logger.error(f"Nie udało się pobrać planów zasilania: {e}")
-            return []
+            return SystemController._cached_power_plans or []
 
     @staticmethod
     def get_active_power_plan() -> Optional[str]:
@@ -221,23 +239,36 @@ class SystemController:
             return False
 
     @staticmethod
-    def kill_process(process_name: str) -> bool:
-        """Zabij wszystkie procesy o danej nazwie."""
+    def kill_processes(process_names: List[str]) -> int:
+        """Zabij wszystkie procesy z podanej listy nazw (grupowo w 1 pass)."""
+        if not process_names:
+            return 0
         try:
             import psutil
             killed = 0
+            # Szybsze wyszukiwanie: zbiór z małymi literami
+            target_names = {name.lower().replace(".exe", "") for name in process_names}
             for proc in psutil.process_iter(['name']):
                 try:
-                    if proc.info['name'] and proc.info['name'].lower() == process_name.lower():
-                        proc.terminate()
-                        killed += 1
+                    p_name = proc.info.get('name')
+                    if p_name:
+                        p_name_lower = p_name.lower().replace(".exe", "")
+                        if p_name_lower in target_names or p_name.lower() in target_names:
+                            proc.terminate()
+                            killed += 1
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     pass
-            logger.info(f"Zakończono {killed} proces(ów) '{process_name}'")
-            return killed > 0
+            if killed > 0:
+                logger.info(f"Grupowo zakończono {killed} proces(ów) z listy {len(process_names)}")
+            return killed
         except Exception as e:
-            logger.error(f"Nie udało się zakończyć procesu {process_name}: {e}")
-            return False
+            logger.error(f"Nie udało się zakończyć procesów grupowo: {e}")
+            return 0
+
+    @staticmethod
+    def kill_process(process_name: str) -> bool:
+        """Zabij wszystkie procesy o danej nazwie."""
+        return SystemController.kill_processes([process_name]) > 0
 
     @staticmethod
     def get_running_processes() -> list[str]:

@@ -275,7 +275,11 @@ class ProfileManager(QObject):
         if self.active_profile:
             self._stop_blocking()
 
-        self._previous_state = self._capture_state()
+        try:
+            self._previous_state = self._capture_state()
+        except Exception as e:
+            logger.error(f"Błąd przechwytywania stanu systemu: {e}")
+            self._previous_state = {}
 
         for action in profile.get_actions():
             try:
@@ -317,15 +321,13 @@ class ProfileManager(QObject):
         logger.info("Profil dezaktywowany – stan przywrócony")
 
     def _stop_blocking(self):
-        for proc_name in self._blocked_processes:
-            SystemController.resume_process(proc_name)
         self._blocked_processes.clear()
 
     def get_blocked_processes(self) -> list[str]:
         return list(self._blocked_processes)
 
     def enforce_blocks(self):
-        """Zawieś zablokowane procesy; emituje sygnał gdy coś nowego zostało zawieszone."""
+        """Zamknij zablokowane procesy; emituje sygnał gdy coś zostało zamknięte."""
         try:
             import psutil
         except ImportError:
@@ -333,17 +335,15 @@ class ProfileManager(QObject):
 
         profile_name = self.active_profile.name if self.active_profile else ""
         for proc_name in self._blocked_processes:
-            newly_suspended = False
-            for proc in psutil.process_iter(['name', 'status']):
+            killed_any = False
+            for proc in psutil.process_iter(['name']):
                 try:
-                    if (proc.info['name']
-                            and proc.info['name'].lower() == proc_name.lower()
-                            and proc.status() != psutil.STATUS_STOPPED):
-                        proc.suspend()
-                        newly_suspended = True
+                    if proc.info['name'] and proc.info['name'].lower() == proc_name.lower():
+                        proc.kill()
+                        killed_any = True
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     pass
-            if newly_suspended:
+            if killed_any:
                 self.blockedAppDetected.emit(proc_name, profile_name)
 
     # ─── Profile domyślne ────────────────────────────────────────

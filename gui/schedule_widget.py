@@ -257,6 +257,7 @@ class CalendarGrid(QWidget):
             painter.setBrush(QColor("#ef4444"))
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawEllipse(x_now - 4, y_now - 4, 8, 8)
+            painter.setBrush(Qt.BrushStyle.NoBrush)  # reset – bez tego brush=czerwony zabarwia bloki
 
         # ── Pionowe linie kolumn ──
         painter.setPen(QPen(QColor("#1e293b"), 1))
@@ -280,9 +281,10 @@ class CalendarGrid(QWidget):
 
             color_hex = self._profile_colors.get(block.profile_name, "#7c3aed")
             fill = _hex_to_qcolor(color_hex, 160)
-            border = _hex_to_qcolor(color_hex, 220)
+            border = _hex_to_qcolor(color_hex, 230)
 
-            painter.fillRect(x, y, bw, bh, fill)
+            # setBrush przed drawRect – inaczej Qt używa poprzedniego brush do wypełnienia
+            painter.setBrush(fill)
             painter.setPen(QPen(border, 1))
             painter.drawRect(x, y, bw - 1, bh - 1)
 

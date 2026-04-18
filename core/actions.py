@@ -247,25 +247,25 @@ class SetPowerPlanAction(Action):
 
 
 class BlockProcessAction(Action):
-    """Blokuj proces – zawiesza go zamiast zabijać."""
+    """Blokuj proces – zamyka go natychmiast i przy każdej próbie uruchomienia."""
 
     action_type = "block_process"
 
     def __init__(self, process_name: str, display_name: str = ""):
         self.process_name = process_name
         self.display_name = display_name or process_name
-        self.active = False
 
     def execute(self) -> bool:
-        self.active = True
-        SystemController.suspend_process(self.process_name)
-        logger.info(f"Blokowanie (zawieszenie) aktywne dla: {self.process_name}")
+        """Zamknij proces jeśli działa – blokada aktywna od teraz."""
+        killed = SystemController.kill_process(self.process_name)
+        if killed:
+            logger.info(f"Zablokowano i zamknięto: {self.process_name}")
+        else:
+            logger.info(f"Blokada aktywna dla: {self.process_name} (proces nie był uruchomiony)")
         return True
 
     def undo(self) -> bool:
-        self.active = False
-        SystemController.resume_process(self.process_name)
-        logger.info(f"Blokowanie wyłączone, wznowiono: {self.process_name}")
+        # Nie można cofnąć zamknięcia procesu – blokada jest zdejmowana przez ProfileManager
         return True
 
     def to_dict(self) -> dict:

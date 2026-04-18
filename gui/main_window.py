@@ -479,9 +479,9 @@ class MainWindow(QMainWindow):
                         and a.get("process_name", "").lower() == proc_name.lower()):
                     display_name = a.get("display_name", proc_name) or proc_name
                     break
-        self._active_block_notification = BlockedAppNotification(
-            display_name, profile_name, self
-        )
+        if self._active_block_notification:
+            self._active_block_notification.hide()
+        self._active_block_notification = BlockedAppNotification(display_name, profile_name)
 
     def _remove_override(self, process_name: str):
         self.monitor.remove_override(process_name)
