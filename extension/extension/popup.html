@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <title>Bloker Stron</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header>
+    <div class="header-row">
+      <h2>Bloker Stron</h2>
+      <span id="profile-badge" class="badge">…</span>
+    </div>
+    <div id="server-status" class="status">Łączenie…</div>
+  </header>
+
+  <div id="lock-notice" class="lock-notice" hidden>Profil chroniony </div>
+
+  <section class="add-box">
+    <input
+      id="site-input"
+      type="text"
+      placeholder="np. twitter.com lub youtube.com/shorts"
+      spellcheck="false"
+      autocomplete="off"
+    />
+    <button id="add-btn">Zablokuj</button>
+  </section>
+
+  <button id="list-toggle" class="list-toggle" aria-expanded="false">
+    <span id="list-title">Zablokowane</span>
+    <span id="list-arrow" class="arrow">▸</span>
+  </button>
+  <ul id="list" hidden></ul>
+
+  <footer id="status-footer"></footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+{
+  "activeProfile": "Praca",
+  "profiles": {
+    "Praca": {
+      "name": "Praca",
+      "color": "#4A90E2",
+      "blockedSites": [
+        "facebook.com",
+        "reddit.com",
+        "youtube.com/shorts",
+        "twitter.com",
+        "x.com",
+        "kahoot.it"
+      ],
+      "locked": true
+    },
+    "Nauka": {
+      "name": "Nauka",
+      "color": "#50C878",
+      "blockedSites": [
+        "reddit.com",
+        "youtube.com/shorts",
+        "tiktok.com",
+        "instagram.com"
+      ]
+    },
+    "Rozrywka": {
+      "name": "Rozrywka",
+      "color": "#E74C3C",
+      "blockedSites": []
+    }
+  }
+}
