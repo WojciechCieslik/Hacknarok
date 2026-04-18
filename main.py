@@ -8,6 +8,7 @@ Jednym kliknięciem przełącz się między „Praca", „Nauka", „Rozrywka".
 import sys
 import os
 import logging
+import threading
 
 # Konfiguracja logowania
 logging.basicConfig(
@@ -18,7 +19,20 @@ logging.basicConfig(
 logger = logging.getLogger("ContextSwitcherPro")
 
 # Dodaj katalog projektu do ścieżki
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+_ROOT = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _ROOT)
+
+
+def _start_extension_server():
+    """Uruchamia serwer Flask dla rozszerzenia Chrome w tle."""
+    try:
+        sys.path.insert(0, os.path.join(_ROOT, "extension"))
+        from server import app
+        import logging as _log
+        _log.getLogger("werkzeug").setLevel(_log.WARNING)
+        app.run(port=8765, debug=False, use_reloader=False)
+    except Exception as e:
+        logger.error(f"Błąd serwera rozszerzenia: {e}")
 
 
 def main():
@@ -38,6 +52,11 @@ def main():
 
     # Styl
     app.setStyleSheet(MAIN_STYLESHEET)
+
+    # Serwer rozszerzenia Chrome (daemon – ginie razem z aplikacją)
+    server_thread = threading.Thread(target=_start_extension_server, daemon=True)
+    server_thread.start()
+    logger.info("Serwer rozszerzenia uruchomiony na porcie 8765")
 
     # Główne okno
     window = MainWindow()

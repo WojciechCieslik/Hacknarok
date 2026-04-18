@@ -4,6 +4,7 @@ ProfileEditor – dialog tworzenia i edycji profilu.
 Sekcje: podstawy, głośność, motyw, tapeta, zablokowane aplikacje.
 """
 
+import hashlib
 import os
 
 from PySide6.QtCore import Qt, Signal
@@ -84,6 +85,7 @@ class ProfileEditorDialog(QDialog):
 
         self._editing = profile
         self._app_rows: list[tuple[QCheckBox, str, str]] = []
+        self._site_rows: list[str] = []
 
         self._setup_ui(profile)
 
@@ -109,6 +111,7 @@ class ProfileEditorDialog(QDialog):
         cl.addWidget(self._section_theme(profile))
         cl.addWidget(self._section_wallpaper(profile))
         cl.addWidget(self._section_apps(profile))
+        cl.addWidget(self._section_websites(profile))
         cl.addStretch()
 
         scroll.setWidget(content)
@@ -499,6 +502,163 @@ class ProfileEditorDialog(QDialog):
             else:
                 cb.setVisible(True)
 
+    # ─── Sekcja: Zablokowane strony www ─────────────────────────
+
+    def _section_websites(self, profile: Profile = None) -> QFrame:
+        frame, layout = self._make_section("🌐  Zablokowane strony www")
+
+        hint = QLabel("Strony zablokowane przez rozszerzenie Chrome gdy profil jest aktywny.")
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #64748b; font-size: 11px;")
+        layout.addWidget(hint)
+
+        # Lista istniejących stron
+        self._sites_container = QWidget()
+        self._sites_layout = QVBoxLayout(self._sites_container)
+        self._sites_layout.setContentsMargins(0, 0, 0, 0)
+        self._sites_layout.setSpacing(4)
+
+        sites_scroll = QScrollArea()
+        sites_scroll.setWidgetResizable(True)
+        sites_scroll.setFixedHeight(160)
+        sites_scroll.setStyleSheet("""
+            QScrollArea {
+                border: 1px solid #334155;
+                border-radius: 8px;
+                background: #0f172a;
+            }
+        """)
+        sites_scroll.setWidget(self._sites_container)
+        layout.addWidget(sites_scroll)
+
+        initial_sites = list(profile.blocked_sites) if profile else []
+        self._site_rows = []
+        self._sites_layout.addStretch()
+        for site in initial_sites:
+            self._add_site_row(site)
+
+        # Wiersz dodawania
+        add_row = QHBoxLayout()
+        self._site_input = QLineEdit()
+        self._site_input.setPlaceholderText("np. facebook.com lub reddit.com/r/...")
+        self._site_input.setMinimumHeight(36)
+        add_row.addWidget(self._site_input, 1)
+
+        add_site_btn = QPushButton("➕  Dodaj")
+        add_site_btn.setMinimumHeight(36)
+        add_site_btn.clicked.connect(self._on_add_site)
+        add_row.addWidget(add_site_btn)
+        layout.addLayout(add_row)
+
+        self._site_input.returnPressed.connect(self._on_add_site)
+
+        # Zabezpieczenie hasłem
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setStyleSheet("QFrame { color: #1e293b; margin: 4px 0; }")
+        layout.addWidget(sep)
+
+        self.lock_cb = QCheckBox("🔒  Zabezpiecz profil hasłem (rozszerzenie nie może edytować)")
+        self.lock_cb.setChecked(profile.locked if profile else False)
+        self.lock_cb.stateChanged.connect(lambda s: self._lock_widget.setVisible(bool(s)))
+        layout.addWidget(self.lock_cb)
+
+        self._lock_widget = QWidget()
+        ll = QFormLayout(self._lock_widget)
+        ll.setContentsMargins(0, 4, 0, 0)
+        ll.setSpacing(8)
+
+        self._password_edit = QLineEdit()
+        self._password_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self._password_edit.setPlaceholderText("Nowe hasło (zostaw puste by zachować aktualne)")
+        self._password_edit.setMinimumHeight(36)
+        ll.addRow("Hasło:", self._password_edit)
+
+        layout.addWidget(self._lock_widget)
+        self._lock_widget.setVisible(self.lock_cb.isChecked())
+
+        return frame
+
+    def _add_site_row(self, site: str):
+        row = QWidget()
+        row.setStyleSheet("""
+            QWidget#siteRow {
+                background: #1e293b;
+                border-radius: 8px;
+                border: 1px solid #334155;
+            }
+            QWidget#siteRow:hover { background: #263548; }
+        """)
+        row.setObjectName("siteRow")
+        row.setFixedHeight(36)
+
+        rl = QHBoxLayout(row)
+        rl.setContentsMargins(10, 0, 6, 0)
+        rl.setSpacing(8)
+
+        globe = QLabel("🌐")
+        globe.setStyleSheet("background: transparent; font-size: 13px;")
+        rl.addWidget(globe)
+
+        lbl = QLabel(site)
+        lbl.setStyleSheet(
+            "color: #e2e8f0; font-size: 12px; background: transparent;"
+        )
+        rl.addWidget(lbl, 1)
+
+        del_btn = QPushButton("✕")
+        del_btn.setFixedSize(24, 24)
+        del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        del_btn.setStyleSheet("""
+            QPushButton {
+                background: #0f172a;
+                color: #64748b;
+                border: 1px solid #334155;
+                border-radius: 12px;
+                font-size: 11px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background: #ef4444;
+                color: #fff;
+                border-color: #ef4444;
+            }
+        """)
+        del_btn.clicked.connect(lambda: self._remove_site_row(site, row))
+        rl.addWidget(del_btn)
+
+        # wstaw przed stretch
+        count = self._sites_layout.count()
+        self._sites_layout.insertWidget(count - 1, row)
+        self._site_rows.append(site)
+
+    def _remove_site_row(self, site: str, row_widget: QWidget):
+        if site in self._site_rows:
+            self._site_rows.remove(site)
+        row_widget.deleteLater()
+
+    def _on_add_site(self):
+        raw = self._site_input.text().strip()
+        if not raw:
+            return
+        site = self._normalize_site(raw)
+        if not site:
+            return
+        if site not in self._site_rows:
+            self._add_site_row(site)
+        self._site_input.clear()
+
+    @staticmethod
+    def _normalize_site(site: str) -> str:
+        site = site.strip().lower()
+        for prefix in ("https://", "http://"):
+            if site.startswith(prefix):
+                site = site[len(prefix):]
+                break
+        if site.startswith("www."):
+            site = site[4:]
+        return site.rstrip("/")
+
     # ─── Zapis ───────────────────────────────────────────────────
 
     def _on_save(self):
@@ -538,12 +698,24 @@ class ProfileEditorDialog(QDialog):
                 if a.get("type") not in preset_types:
                     actions.append(a)
 
+        locked = self.lock_cb.isChecked()
+        password_hash = ""
+        if locked:
+            new_pw = self._password_edit.text()
+            if new_pw:
+                password_hash = hashlib.sha256(new_pw.encode()).hexdigest()
+            elif self._editing and self._editing.locked:
+                password_hash = self._editing.password_hash
+
         data = {
             "name": name,
             "icon": self.icon_combo.currentData(),
             "color": self.color_combo.currentData(),
             "description": "",
             "actions": actions,
+            "blocked_sites": list(self._site_rows),
+            "locked": locked,
+            "password_hash": password_hash,
         }
 
         self.profileSaved.emit(data)

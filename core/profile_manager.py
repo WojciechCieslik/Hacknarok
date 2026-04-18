@@ -44,6 +44,9 @@ class Profile:
     color: str = "#7c3aed"
     description: str = ""
     actions: list[dict] = field(default_factory=list)
+    blocked_sites: list[str] = field(default_factory=list)
+    locked: bool = False
+    password_hash: str = ""
 
     def get_actions(self) -> list[Action]:
         result = []
@@ -55,13 +58,19 @@ class Profile:
         return result
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "name": self.name,
             "icon": self.icon,
             "color": self.color,
             "description": self.description,
             "actions": self.actions,
+            "blocked_sites": self.blocked_sites,
         }
+        if self.locked:
+            d["locked"] = True
+        if self.password_hash:
+            d["password_hash"] = self.password_hash
+        return d
 
     @classmethod
     def from_dict(cls, data: dict) -> "Profile":
@@ -76,6 +85,9 @@ class Profile:
             color=data.get("color", "#7c3aed"),
             description=data.get("description", ""),
             actions=actions,
+            blocked_sites=data.get("blocked_sites", []),
+            locked=data.get("locked", False),
+            password_hash=data.get("password_hash", ""),
         )
 
 
@@ -237,6 +249,9 @@ class ProfileManager(QObject):
                     color=p.color,
                     description=p.description,
                     actions=copy.deepcopy(p.actions),
+                    blocked_sites=copy.deepcopy(p.blocked_sites),
+                    locked=p.locked,
+                    password_hash=p.password_hash,
                 )
                 self.add_profile(new_profile)
                 return new_profile
