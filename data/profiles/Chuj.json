@@ -5,8 +5,17 @@
   "description": "",
   "actions": [
     {
-      "level": 23,
+      "level": 56,
       "type": "set_volume"
+    },
+    {
+      "dark": true,
+      "type": "set_theme"
+    },
+    {
+      "display_name": "Spotify",
+      "process_name": "Spotify.exe",
+      "type": "block_process"
     },
     {
       "image_path": "C:/Users/micha/Desktop/basiagrill.png",

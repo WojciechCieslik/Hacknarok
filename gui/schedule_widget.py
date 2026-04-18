@@ -7,7 +7,7 @@ następnie przypisz profil do tego przedziału.
 
 from datetime import datetime
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtGui import (
     QPainter, QColor, QPen, QFont, QCursor
 )
@@ -416,14 +416,25 @@ class WeeklyCalendarWidget(QWidget):
         layout.addLayout(header)
 
         # ── Scroll area z siatką ──
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setStyleSheet("QScrollArea { border: none; }")
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._scroll.setStyleSheet("QScrollArea { border: none; }")
 
         self._grid = CalendarGrid(scheduler, profile_names)
-        scroll.setWidget(self._grid)
-        layout.addWidget(scroll, 1)
+        self._scroll.setWidget(self._grid)
+        layout.addWidget(self._scroll, 1)
+
+        # Przewiń do teraźniejszości po wyrenderowaniu layoutu
+        QTimer.singleShot(80, self.scroll_to_now)
+
+    def scroll_to_now(self):
+        """Przewiń tak, aby bieżąca godzina była widoczna na środku ekranu."""
+        now = datetime.now()
+        y_now = HEAD_H + int((now.hour * 2 + now.minute / 30.0) * SLOT_H)
+        viewport_h = self._scroll.viewport().height()
+        target = max(0, y_now - viewport_h // 2)
+        self._scroll.verticalScrollBar().setValue(target)
 
     def update_profile_names(self, names: list[str]):
         self._grid.profile_names = names

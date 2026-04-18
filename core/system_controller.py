@@ -21,20 +21,27 @@ class SystemController:
     # ─── Głośność ───────────────────────────────────────────────
 
     @staticmethod
+    def _audio_endpoint_volume():
+        """Zwróć interfejs IAudioEndpointVolume (obsługuje różne wersje pycaw)."""
+        from ctypes import cast, POINTER
+        from comtypes import CLSCTX_ALL
+        from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+
+        speakers = AudioUtilities.GetSpeakers()
+        # Stara pycaw zwraca IMMDevice (COM) → ma .Activate()
+        # Nowa pycaw opakowuje je w AudioDevice → trzeba użyć ._dev
+        device = speakers
+        if not hasattr(device, "Activate"):
+            device = getattr(device, "_dev", device)
+        interface = device.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+        return cast(interface, POINTER(IAudioEndpointVolume))
+
+    @staticmethod
     def get_volume() -> int:
         """Pobierz aktualny poziom głośności (0-100)."""
         try:
-            from ctypes import cast, POINTER
-            from comtypes import CLSCTX_ALL
-            from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
-
-            devices = AudioUtilities.GetSpeakers()
-            interface = devices.Activate(
-                IAudioEndpointVolume._iid_, CLSCTX_ALL, None
-            )
-            volume = cast(interface, POINTER(IAudioEndpointVolume))
-            current = volume.GetMasterVolumeLevelScalar()
-            return int(round(current * 100))
+            vol = SystemController._audio_endpoint_volume()
+            return int(round(vol.GetMasterVolumeLevelScalar() * 100))
         except Exception as e:
             logger.error(f"Nie udało się pobrać głośności: {e}")
             return 50
@@ -43,17 +50,9 @@ class SystemController:
     def set_volume(level: int) -> bool:
         """Ustaw głośność systemową (0-100)."""
         try:
-            from ctypes import cast, POINTER
-            from comtypes import CLSCTX_ALL
-            from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
-
             level = max(0, min(100, level))
-            devices = AudioUtilities.GetSpeakers()
-            interface = devices.Activate(
-                IAudioEndpointVolume._iid_, CLSCTX_ALL, None
-            )
-            volume = cast(interface, POINTER(IAudioEndpointVolume))
-            volume.SetMasterVolumeLevelScalar(level / 100.0, None)
+            vol = SystemController._audio_endpoint_volume()
+            vol.SetMasterVolumeLevelScalar(level / 100.0, None)
             logger.info(f"Głośność ustawiona na {level}%")
             return True
         except Exception as e:
@@ -131,16 +130,30 @@ class SystemController:
     # ─── Plan zasilania ─────────────────────────────────────────
 
     @staticmethod
+    def _run_cmd(args: list[str]) -> str:
+        """Uruchom polecenie i zwróć stdout jako str (obsługa polskiego OEM cp1250)."""
+        result = subprocess.run(
+            args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+        if not result.stdout:
+            return ""
+        for enc in ("cp1250", "utf-8", "cp852", "ascii"):
+            try:
+                return result.stdout.decode(enc)
+            except UnicodeDecodeError:
+                continue
+        return result.stdout.decode("ascii", errors="replace")
+
+    @staticmethod
     def get_power_plans() -> list[dict]:
         """Pobierz listę dostępnych planów zasilania."""
         try:
-            result = subprocess.run(
-                ["powercfg", "/list"],
-                capture_output=True, text=True, encoding="utf-8",
-                creationflags=subprocess.CREATE_NO_WINDOW
-            )
+            output = SystemController._run_cmd(["powercfg", "/list"])
             plans = []
-            for line in result.stdout.splitlines():
+            for line in output.splitlines():
                 if "GUID" in line:
                     # Format: "GUID planu zasilania: <guid>  (nazwa) *"
                     parts = line.split(":")

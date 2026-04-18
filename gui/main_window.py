@@ -124,6 +124,7 @@ class MainWindow(QMainWindow):
         settings_tab = self._build_settings_tab()
         self.tabs.addTab(settings_tab, "⚙️ Ustawienia")
 
+        self.tabs.currentChanged.connect(self._on_tab_changed)
         main_layout.addWidget(self.tabs, 1)
 
         # ── Pasek statusu ──
@@ -325,6 +326,7 @@ class MainWindow(QMainWindow):
                 color=profile.color,
                 description=profile.description,
                 actions_count=len(profile.actions),
+                actions=profile.actions,
                 is_active=(profile.name == active_name),
             )
             card.switchClicked.connect(self._on_card_switch)
@@ -446,6 +448,10 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("Profil dezaktywowany – stan przywrócony")
 
         self._refresh_profiles()
+
+    def _on_tab_changed(self, index: int):
+        if hasattr(self, "schedule_widget") and index == 1:
+            self.schedule_widget.scroll_to_now()
 
     def _on_schedule_trigger(self, profile_name: str):
         """Harmonogram wywołał przełączenie – ignoruj jeśli profil włączony ręcznie."""
