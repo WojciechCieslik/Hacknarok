@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 
 from core.profile_manager import ProfileManager, Profile
 from core.scheduler import Scheduler
+from gui.password_utils import request_profile_password
 from gui.profile_card import ProfileCard, _hex_to_rgba
 from gui.profile_editor import ProfileEditorDialog
 from gui.schedule_widget import WeeklyCalendarWidget
@@ -99,7 +100,9 @@ class MainWindow(QMainWindow):
         schedule_layout.setContentsMargins(0, 16, 0, 0)
 
         profile_names = [p.name for p in self.profile_manager.profiles]
-        self.schedule_widget = WeeklyCalendarWidget(self.scheduler, profile_names)
+        self.schedule_widget = WeeklyCalendarWidget(
+            self.scheduler, profile_names, profile_manager=self.profile_manager
+        )
         schedule_layout.addWidget(self.schedule_widget)
 
         self.tabs.addTab(schedule_tab, "📅 Harmonogram")
@@ -210,7 +213,7 @@ class MainWindow(QMainWindow):
             action = QAction(f"{profile.icon} {profile.name}", self)
             name = profile.name
             action.triggered.connect(
-                lambda checked, n=name: self.profile_manager.switch_profile(n, manual=True)
+                lambda checked, n=name: self._on_card_switch(n)
             )
             tray_menu.addAction(action)
 
@@ -287,16 +290,28 @@ class MainWindow(QMainWindow):
                 and self.profile_manager.active_profile.name == name):
             self._manual_deactivate()
         else:
+            profile = self.profile_manager.get_profile(name)
+            if profile and not request_profile_password(
+                self, profile, "aktywować profil"
+            ):
+                return
             self.profile_manager.switch_profile(name, manual=True)
 
     def _manual_deactivate(self):
         """Dezaktywacja ręczna – poinformuj harmonogram aby nie wznawiał bloku."""
+        active = self.profile_manager.active_profile
+        if active and not request_profile_password(
+            self, active, "dezaktywować profil"
+        ):
+            return
         self.scheduler.notify_manual_deactivation()
         self.profile_manager.deactivate_profile()
 
     def _on_card_edit(self, name: str):
         profile = self.profile_manager.get_profile(name)
         if not profile:
+            return
+        if not request_profile_password(self, profile, "edytować profil"):
             return
         dialog = ProfileEditorDialog(profile, self)
         dialog.profileSaved.connect(
@@ -305,6 +320,9 @@ class MainWindow(QMainWindow):
         dialog.exec()
 
     def _on_card_delete(self, name: str):
+        profile = self.profile_manager.get_profile(name)
+        if profile and not request_profile_password(self, profile, "usunąć profil"):
+            return
         reply = QMessageBox.question(
             self,
             "Usuń profil",
