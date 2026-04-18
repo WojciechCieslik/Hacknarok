@@ -384,10 +384,3 @@ class MainWindow(QMainWindow):
             return
         if self.profile_manager.active_profile:
             self.profile_manager.deactivate_profile()
-
-    # ─── Zamykanie ────────────────────────────────────────────────
-
-    def closeEvent(self, event):
-        """Minimalizuj do zasobnika zamiast zamykania."""
-        event.ignore()
-        self.hide()
