@@ -1,12 +1,18 @@
 """
-ProfileCard – wiersz profilu na liście z rozwijalnymi szczegółami.
+ProfileCard – przemysłowy rząd profilu z techniczną typografią.
 """
+
+import os
+import re
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy
 )
+
+
+_MONO = "JetBrains Mono", "IBM Plex Mono", "Consolas", "monospace"
 
 
 def _hex_to_rgba(hex_color: str, alpha: int) -> str:
@@ -17,35 +23,49 @@ def _hex_to_rgba(hex_color: str, alpha: int) -> str:
     return hex_color
 
 
+def _initials(name: str, icon_field: str = "") -> str:
+    """Zwróć 1-3 znakowy kod z pola icon (jeśli tekstowe) lub z nazwy profilu."""
+    if icon_field:
+        clean = re.sub(r"[^A-Za-z0-9]", "", icon_field)
+        if clean:
+            return clean[:3].upper()
+    parts = re.findall(r"[A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż0-9]+", name or "")
+    if not parts:
+        return "::"
+    if len(parts) == 1:
+        return parts[0][:2].upper()
+    return (parts[0][0] + parts[1][0]).upper()
+
+
 def _build_details_text(actions: list[dict], blocked_sites: list[str] = None) -> list[str]:
-    """Zwróć listę czytelnych linii opisu akcji profilu."""
+    """Zwróć listę technicznych linii opisu."""
     lines = []
     blocked = []
     for a in actions:
         t = a.get("type", "")
         if t == "set_theme":
-            lines.append("🌙  Motyw: ciemny" if a.get("dark", True) else "☀️  Motyw: jasny")
+            mode = "DARK" if a.get("dark", True) else "LIGHT"
+            lines.append(f"THEME        :   {mode}")
         elif t == "set_wallpaper":
-            import os
             name = os.path.basename(a.get("image_path", "") or "")
             if name:
-                lines.append(f"🖼️  Tapeta: {name}")
+                lines.append(f"WALLPAPER    :   {name}")
         elif t == "block_process":
             blocked.append(a.get("display_name") or a.get("process_name", "?"))
         elif t == "launch_app":
             label = a.get("label") or a.get("path", "?")
-            lines.append(f"🚀  Uruchamia: {label}")
+            lines.append(f"LAUNCH       :   {label}")
     if blocked:
         preview = ", ".join(blocked[:3])
         if len(blocked) > 3:
-            preview += f"  (+{len(blocked) - 3})"
-        lines.append(f"🚫  Blokuje aplikacje: {preview}")
+            preview += f"  +{len(blocked) - 3}"
+        lines.append(f"BLOCK  APPS  :   {preview}")
     if blocked_sites:
         preview = ", ".join(blocked_sites[:3])
         if len(blocked_sites) > 3:
-            preview += f"  (+{len(blocked_sites) - 3})"
-        lines.append(f"🌐  Blokuje strony: {preview}")
-    return lines or ["Brak skonfigurowanych akcji"]
+            preview += f"  +{len(blocked_sites) - 3}"
+        lines.append(f"BLOCK  WEB   :   {preview}")
+    return lines or ["NO  ACTIONS  CONFIGURED"]
 
 
 class ProfileCard(QFrame):
@@ -53,13 +73,13 @@ class ProfileCard(QFrame):
     editClicked = Signal(str)
     deleteClicked = Signal(str)
 
-    _COLLAPSED_H = 82
+    _COLLAPSED_H = 90
 
     def __init__(
         self,
         name: str,
-        icon: str = "🖥️",
-        color: str = "#7c3aed",
+        icon: str = "",
+        color: str = "#5968ff",
         description: str = "",
         actions_count: int = 0,
         actions: list[dict] = None,
@@ -86,72 +106,91 @@ class ProfileCard(QFrame):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # ── Górny wiersz (zawsze widoczny) ──────────────────────
         top = QFrame()
         top.setFixedHeight(self._COLLAPSED_H)
         top.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         top.setStyleSheet("background: transparent; border: none;")
 
         top_layout = QHBoxLayout(top)
-        top_layout.setContentsMargins(14, 8, 14, 8)
-        top_layout.setSpacing(12)
+        top_layout.setContentsMargins(16, 10, 14, 10)
+        top_layout.setSpacing(16)
 
-        # Ikona
-        icon_label = QLabel(icon)
-        icon_label.setFont(QFont("Segoe UI Emoji", 20))
-        icon_label.setFixedSize(44, 44)
-        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon_label.setStyleSheet(
-            f"background: {_hex_to_rgba(color, 34)}; border-radius: 10px;"
+        badge = QLabel(_initials(name, icon))
+        badge_font = QFont()
+        badge_font.setFamilies(list(_MONO))
+        badge_font.setPointSize(13)
+        badge_font.setBold(True)
+        badge.setFont(badge_font)
+        badge.setFixedSize(54, 54)
+        badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        badge.setStyleSheet(
+            f"background: {_hex_to_rgba(color, 48)};"
+            f"color: {color};"
+            f"border: 1px solid {_hex_to_rgba(color, 220)};"
+            f"border-left: 3px solid {color};"
+            f"letter-spacing: 2px;"
         )
-        top_layout.addWidget(icon_label)
+        top_layout.addWidget(badge, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        # Info (nazwa + stan)
         info = QVBoxLayout()
-        info.setSpacing(2)
+        info.setSpacing(4)
         info.setContentsMargins(0, 0, 0, 0)
 
-        name_label = QLabel(name)
-        name_label.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
-        name_label.setStyleSheet(f"color: {color}; background: transparent;")
+        name_label = QLabel(name.upper())
+        name_font = QFont()
+        name_font.setFamilies(list(_MONO))
+        name_font.setPointSize(12)
+        name_font.setBold(True)
+        name_label.setFont(name_font)
+        name_label.setStyleSheet(
+            f"color: {color}; background: transparent; letter-spacing: 3px;"
+        )
         info.addWidget(name_label)
 
         if is_active:
-            sub = QLabel("● AKTYWNY")
+            sub = QLabel("///  ACTIVE  ///  ENFORCING")
             sub.setStyleSheet(
-                "color: #10b981; font-size: 11px; font-weight: bold; background: transparent;"
+                "color: #3fb98a; font-size: 10px; font-weight: 700;"
+                "font-family: 'JetBrains Mono','Consolas',monospace;"
+                "letter-spacing: 2.5px; background: transparent;"
             )
         elif description:
             sub = QLabel(description)
-            sub.setStyleSheet("color: #94a3b8; font-size: 11px; background: transparent;")
+            sub.setStyleSheet(
+                "color: #aab3d8; font-size: 11px; background: transparent;"
+                "font-family: 'Inter','Segoe UI',sans-serif;"
+            )
         else:
-            sub = QLabel(f"{actions_count} akcji")
-            sub.setStyleSheet("color: #64748b; font-size: 11px; background: transparent;")
+            sub = QLabel(f"ACTIONS  :   {actions_count:02d}")
+            sub.setStyleSheet(
+                "color: #727aa3; font-size: 10px; letter-spacing: 2px;"
+                "font-family: 'JetBrains Mono','Consolas',monospace;"
+                "background: transparent;"
+            )
         info.addWidget(sub)
 
         top_layout.addLayout(info, 1)
 
-        # Przyciski akcji (prawa kolumna)
         btn_row = QHBoxLayout()
         btn_row.setSpacing(6)
         btn_row.setContentsMargins(0, 0, 0, 0)
 
         if is_active:
-            act_btn = self._make_btn("⏹  Dezaktywuj", "#ef4444")
+            act_btn = self._make_btn("DEACTIVATE", "#e5484d")
         else:
-            act_btn = self._make_btn("▶  Aktywuj", color)
+            act_btn = self._make_btn("ACTIVATE", color)
         act_btn.clicked.connect(lambda: self.switchClicked.emit(self.profile_name))
         btn_row.addWidget(act_btn)
 
-        edit_btn = self._make_btn("✎  Edytuj", "#94a3b8")
+        edit_btn = self._make_btn("EDIT", "#aab3d8")
         edit_btn.clicked.connect(lambda: self.editClicked.emit(self.profile_name))
         btn_row.addWidget(edit_btn)
 
-        del_btn = self._make_btn("✕  Usuń", "#ef4444")
+        del_btn = self._make_btn("REMOVE", "#e5484d")
         del_btn.clicked.connect(lambda: self.deleteClicked.emit(self.profile_name))
         btn_row.addWidget(del_btn)
 
-        self._expand_btn = self._make_btn("˅  Szczegóły", "#64748b")
+        self._expand_btn = self._make_btn("v  SPEC", "#727aa3")
         self._expand_btn.clicked.connect(self._toggle_expand)
         btn_row.addWidget(self._expand_btn)
 
@@ -159,29 +198,29 @@ class ProfileCard(QFrame):
 
         root.addWidget(top)
 
-        # ── Sekcja szczegółów (ukryta domyślnie) ─────────────────
         self._details = QFrame()
         self._details.setVisible(False)
         self._details.setStyleSheet(
-            f"background: {_hex_to_rgba(color, 12)};"
-            f"border-top: 1px solid {_hex_to_rgba(color, 60)};"
-            "border-radius: 0 0 12px 12px; border-left: none; border-right: none;"
+            f"background: {_hex_to_rgba(color, 18)};"
+            f"border-top: 1px solid {_hex_to_rgba(color, 120)};"
+            "border-left: none; border-right: none; border-bottom: none;"
         )
 
         det_layout = QVBoxLayout(self._details)
-        det_layout.setContentsMargins(62, 8, 14, 10)
-        det_layout.setSpacing(3)
+        det_layout.setContentsMargins(88, 10, 16, 12)
+        det_layout.setSpacing(4)
 
         detail_lines = _build_details_text(actions, blocked_sites)
         for line in detail_lines:
             lbl = QLabel(line)
             lbl.setStyleSheet(
-                "color: #94a3b8; font-size: 11px; background: transparent; border: none;"
+                "color: #aab3d8; font-size: 10px; background: transparent;"
+                "font-family: 'JetBrains Mono','Consolas',monospace;"
+                "letter-spacing: 1px; border: none;"
             )
             det_layout.addWidget(lbl)
 
-        # Wysokość szczegółów: 10 (padding) + n*16px + 10
-        self._details_h = 20 + len(detail_lines) * 17
+        self._details_h = 22 + len(detail_lines) * 18
         self._details.setFixedHeight(self._details_h)
 
         root.addWidget(self._details)
@@ -189,10 +228,9 @@ class ProfileCard(QFrame):
     def _toggle_expand(self):
         self._expanded = not self._expanded
         self._details.setVisible(self._expanded)
-        self._expand_btn.setText("˄  Zwiń" if self._expanded else "˅  Szczegóły")
+        self._expand_btn.setText("^  HIDE" if self._expanded else "v  SPEC")
         new_h = self._COLLAPSED_H + (self._details_h if self._expanded else 0)
         self.setFixedHeight(new_h)
-        # Poinformuj layout rodzica o zmianie rozmiaru
         if self.parent():
             self.parent().updateGeometry()
             if hasattr(self.parent(), "adjustSize"):
@@ -200,22 +238,26 @@ class ProfileCard(QFrame):
 
     def _make_btn(self, label: str, color: str) -> QPushButton:
         btn = QPushButton(label)
-        btn.setMinimumHeight(34)
+        btn.setMinimumHeight(32)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        f = QFont("Segoe UI", 10)
+        f = QFont()
+        f.setFamilies(list(_MONO))
+        f.setPointSize(9)
         f.setBold(True)
         btn.setFont(f)
-        hover_bg = _hex_to_rgba(color, 40)
-        pressed_bg = _hex_to_rgba(color, 80)
-        border_dim = _hex_to_rgba(color, 100)
+        hover_bg = _hex_to_rgba(color, 50)
+        pressed_bg = _hex_to_rgba(color, 100)
+        border_dim = _hex_to_rgba(color, 130)
         btn.setStyleSheet(f"""
             QPushButton {{
                 background: transparent;
                 border: 1px solid {border_dim};
-                border-radius: 6px;
+                border-radius: 0;
                 color: {color};
-                padding: 4px 10px;
-                font-size: 12px;
+                padding: 4px 12px;
+                font-size: 10px;
+                font-weight: 700;
+                letter-spacing: 2px;
             }}
             QPushButton:hover {{
                 background: {hover_bg};
@@ -226,4 +268,3 @@ class ProfileCard(QFrame):
             }}
         """)
         return btn
-

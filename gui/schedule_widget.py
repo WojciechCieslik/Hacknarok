@@ -51,8 +51,8 @@ class BlockAssignDialog(QDialog):
     def __init__(self, day: int, slot_start: int, slot_end: int,
                  scheduler: Scheduler, profile_names: list[str], parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Przypisz profil")
-        self.setFixedSize(340, 190)
+        self.setWindowTitle("ASSIGN PROFILE")
+        self.setFixedSize(360, 200)
         self.setWindowFlags(
             Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint
         )
@@ -70,9 +70,10 @@ class BlockAssignDialog(QDialog):
         frame = QFrame()
         frame.setStyleSheet("""
             QFrame {
-                background: #1e293b;
-                border: 2px solid #7c3aed;
-                border-radius: 12px;
+                background: #141a44;
+                border: 1px solid #7d8aff;
+                border-left: 3px solid #7d8aff;
+                border-radius: 0;
             }
         """)
         fl = QVBoxLayout(frame)
@@ -83,11 +84,13 @@ class BlockAssignDialog(QDialog):
         h_start, m_start = _slot_to_hm(slot_start)
         h_end, m_end = _slot_to_hm(slot_end)
         title = QLabel(
-            f"📅  {DAY_NAMES[day]}  "
-            f"{h_start:02d}:{m_start:02d} – {h_end:02d}:{m_end:02d}"
+            f"{DAY_NAMES[day].upper()}   //   "
+            f"{h_start:02d}:{m_start:02d}  —  {h_end:02d}:{m_end:02d}"
         )
         title.setStyleSheet(
-            "color: #f1f5f9; font-size: 14px; font-weight: bold; border: none;"
+            "color: #e8ecf5; font-size: 12px; font-weight: 700; border: none;"
+            "font-family: 'JetBrains Mono','Consolas',monospace;"
+            "letter-spacing: 2px;"
         )
         fl.addWidget(title)
 
@@ -99,13 +102,13 @@ class BlockAssignDialog(QDialog):
 
         # Przyciski
         btn_row = QHBoxLayout()
-        cancel_btn = QPushButton("Anuluj")
+        cancel_btn = QPushButton("CANCEL")
         cancel_btn.clicked.connect(self.reject)
         btn_row.addWidget(cancel_btn)
 
         btn_row.addStretch()
 
-        save_btn = QPushButton("✓  Zapisz")
+        save_btn = QPushButton("COMMIT")
         save_btn.setObjectName("primaryButton")
         save_btn.clicked.connect(self._save)
         btn_row.addWidget(save_btn)
@@ -207,22 +210,24 @@ class CalendarGrid(QWidget):
         today = datetime.now().weekday()
 
         # ── Tło ──
-        painter.fillRect(0, 0, total_w, total_h, QColor("#0f172a"))
+        painter.fillRect(0, 0, total_w, total_h, QColor("#0d1230"))
 
         # ── Nagłówek dni ──
         for d in range(7):
             x = TIME_W + d * col_w
             is_today = d == today
-            bg = QColor("#7c3aed") if is_today else QColor("#1a2332")
+            bg = QColor("#3a47d4") if is_today else QColor("#141a44")
             painter.fillRect(x + 1, 1, col_w - 2, HEAD_H - 2, bg)
-            painter.setPen(QColor("#ffffff" if is_today else "#94a3b8"))
-            f = QFont("Segoe UI", 10)
-            f.setBold(is_today)
+            if is_today:
+                painter.fillRect(x + 1, HEAD_H - 3, col_w - 2, 2, QColor("#7d8aff"))
+            painter.setPen(QColor("#e8ecf5" if is_today else "#aab3d8"))
+            f = QFont("JetBrains Mono", 9)
+            f.setBold(True)
             painter.setFont(f)
             painter.drawText(
                 x, 0, col_w, HEAD_H,
                 Qt.AlignmentFlag.AlignCenter,
-                DAY_NAMES[d],
+                DAY_NAMES[d].upper(),
             )
 
         # ── Linie siatki i etykiety godzin ──
@@ -231,13 +236,13 @@ class CalendarGrid(QWidget):
             h, m = _slot_to_hm(slot)
 
             if slot < SLOTS:
-                pen_color = "#1e293b" if m == 0 else "#141f2e"
+                pen_color = "#2a3372" if m == 0 else "#171e48"
                 painter.setPen(QPen(QColor(pen_color), 1))
                 painter.drawLine(TIME_W, y, total_w, y)
 
             if m == 0:
-                painter.setPen(QColor("#475569"))
-                painter.setFont(QFont("Segoe UI", 8))
+                painter.setPen(QColor("#727aa3"))
+                painter.setFont(QFont("JetBrains Mono", 8))
                 painter.drawText(
                     2, y, TIME_W - 6, SLOT_H,
                     Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
@@ -250,17 +255,16 @@ class CalendarGrid(QWidget):
             current_slot_frac = now.hour * 2 + now.minute / 30.0
             y_now = int(HEAD_H + current_slot_frac * SLOT_H)
             x_now = TIME_W + now.weekday() * col_w
-            pen = QPen(QColor("#ef4444"), 2)
+            pen = QPen(QColor("#e5484d"), 2)
             painter.setPen(pen)
             painter.drawLine(x_now, y_now, x_now + col_w, y_now)
-            # Kółko na lewej krawędzi
-            painter.setBrush(QColor("#ef4444"))
+            painter.setBrush(QColor("#e5484d"))
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawEllipse(x_now - 4, y_now - 4, 8, 8)
             painter.setBrush(Qt.BrushStyle.NoBrush)  # reset – bez tego brush=czerwony zabarwia bloki
 
         # ── Pionowe linie kolumn ──
-        painter.setPen(QPen(QColor("#1e293b"), 1))
+        painter.setPen(QPen(QColor("#2a3372"), 1))
         for d in range(8):
             x = TIME_W + d * col_w
             painter.drawLine(x, 0, x, total_h)
@@ -279,24 +283,24 @@ class CalendarGrid(QWidget):
             bw = col_w - 4
             bh = (end_slot - start_slot) * SLOT_H - 2
 
-            color_hex = self._profile_colors.get(block.profile_name, "#7c3aed")
-            fill = _hex_to_qcolor(color_hex, 160)
-            border = _hex_to_qcolor(color_hex, 230)
+            color_hex = self._profile_colors.get(block.profile_name, "#5968ff")
+            fill = _hex_to_qcolor(color_hex, 150)
+            border = _hex_to_qcolor(color_hex, 240)
 
-            # setBrush przed drawRect – inaczej Qt używa poprzedniego brush do wypełnienia
             painter.setBrush(fill)
             painter.setPen(QPen(border, 1))
             painter.drawRect(x, y, bw - 1, bh - 1)
+            # Left accent bar
+            painter.fillRect(x, y, 3, bh - 1, border)
 
-            # Nazwa profilu
-            painter.setPen(QColor("#ffffff"))
-            f = QFont("Segoe UI", 8)
+            painter.setPen(QColor("#e8ecf5"))
+            f = QFont("JetBrains Mono", 8)
             f.setBold(True)
             painter.setFont(f)
             painter.drawText(
-                x + 4, y + 2, bw - 8, bh - 4,
+                x + 8, y + 2, bw - 10, bh - 4,
                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop,
-                block.profile_name,
+                block.profile_name.upper(),
             )
 
         # ── Zaznaczenie przeciągania ──
@@ -310,8 +314,8 @@ class CalendarGrid(QWidget):
             sw = col_w - 2
             sh = (slot_max - slot_min) * SLOT_H
 
-            painter.fillRect(x, y, sw, sh, QColor(124, 58, 237, 70))
-            painter.setPen(QPen(QColor("#7c3aed"), 2))
+            painter.fillRect(x, y, sw, sh, QColor(89, 104, 255, 80))
+            painter.setPen(QPen(QColor("#7d8aff"), 1, Qt.PenStyle.DashLine))
             painter.drawRect(x, y, sw - 1, sh - 1)
 
         painter.end()
@@ -385,13 +389,15 @@ class CalendarGrid(QWidget):
         block = self.scheduler.blocks[block_idx]
         menu = QMenu(self)
         menu.setStyleSheet("""
-            QMenu { background: #1e293b; border: 1px solid #334155; border-radius: 8px; }
-            QMenu::item { color: #f1f5f9; padding: 8px 20px; }
-            QMenu::item:selected { background: #7c3aed; }
+            QMenu { background: #141a44; border: 1px solid #4856b5; border-radius: 0; }
+            QMenu::item { color: #e8ecf5; padding: 8px 20px;
+                font-family: 'JetBrains Mono','Consolas',monospace;
+                font-size: 11px; letter-spacing: 1px; }
+            QMenu::item:selected { background: #3a47d4; }
         """)
         del_act = menu.addAction(
-            f"🗑️  Usuń  '{block.profile_name}'"
-            f"  ({block.start_str()}–{block.end_str()})"
+            f"REMOVE  //  {block.profile_name.upper()}"
+            f"   [ {block.start_str()} — {block.end_str()} ]"
         )
         action = menu.exec(global_pos)
         if action == del_act:
@@ -414,13 +420,16 @@ class WeeklyCalendarWidget(QWidget):
 
         # ── Nagłówek ──
         header = QHBoxLayout()
-        title = QLabel("📅  Harmonogram tygodniowy")
+        title = QLabel("WEEKLY  //  SCHEDULE  GRID")
         title.setObjectName("sectionTitle")
         header.addWidget(title)
         header.addStretch()
 
-        hint = QLabel("Przeciągnij na dniu aby dodać blok  ·  PPM na bloku aby usunąć")
-        hint.setStyleSheet("color: #475569; font-size: 11px;")
+        hint = QLabel("DRAG  on  a  day  to  create  block   ·   RMB  on  block  to  remove")
+        hint.setStyleSheet(
+            "color: #727aa3; font-size: 10px; letter-spacing: 1.5px;"
+            "font-family: 'JetBrains Mono','Consolas',monospace;"
+        )
         header.addWidget(hint)
         layout.addLayout(header)
 
