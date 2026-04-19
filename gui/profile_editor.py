@@ -21,9 +21,9 @@ from core.system_controller import SystemController
 # ─── Stałe ──────────────────────────────────────────────────────────
 
 PROFILE_ICONS = [
-    "🏢", "📚", "🎬", "🎮", "🎵", "💻", "🧘", "☕",
-    "🌙", "🏠", "🎨", "📝", "🔧", "🏃", "📱", "🖥️",
-    "🧠", "🎯", "⚡", "🌟",
+    "WRK", "STD", "FOC", "DEV", "OPS", "LAB", "BLD", "SYS",
+    "FUN", "GME", "MUS", "ART", "REC", "CHL", "EAT", "NAP",
+    "RUN", "GYM", "OUT", "ZEN",
 ]
 
 PROFILE_COLORS = [
@@ -127,19 +127,19 @@ class ProfileEditorDialog(QDialog):
         # Pasek przycisków
         btn_bar = QFrame()
         btn_bar.setStyleSheet(
-            "QFrame { background: #111827; border-top: 1px solid #1e293b; }"
+            "QFrame { background: #0d1230; border-top: 1px solid #2a3372; }"
         )
         bl = QHBoxLayout(btn_bar)
         bl.setContentsMargins(20, 12, 20, 12)
 
-        cancel = QPushButton("✕  Anuluj")
+        cancel = QPushButton("CANCEL")
         cancel.setMinimumHeight(44)
         cancel.setMinimumWidth(130)
         cancel.clicked.connect(self.reject)
         bl.addWidget(cancel)
         bl.addStretch()
 
-        save = QPushButton("💾  Zapisz profil")
+        save = QPushButton("COMMIT  PROFILE")
         save.setObjectName("primaryButton")
         save.setMinimumHeight(44)
         save.setMinimumWidth(180)
@@ -166,15 +166,15 @@ class ProfileEditorDialog(QDialog):
     # ─── Sekcja: Podstawowe ──────────────────────────────────────
 
     def _section_basics(self, profile: Profile = None) -> QFrame:
-        frame, layout = self._make_section("📌  Podstawowe informacje")
+        frame, layout = self._make_section("BASICS  //  IDENTIFICATION")
 
         form = QFormLayout()
         form.setSpacing(10)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
         self.name_edit = QLineEdit(profile.name if profile else "")
-        self.name_edit.setPlaceholderText("Nazwa profilu...")
-        form.addRow("Nazwa:", self.name_edit)
+        self.name_edit.setPlaceholderText("profile name...")
+        form.addRow("NAME:", self.name_edit)
 
         self.icon_combo = QComboBox()
         for ico in PROFILE_ICONS:
@@ -182,19 +182,18 @@ class ProfileEditorDialog(QDialog):
         if profile:
             idx = next((i for i, ic in enumerate(PROFILE_ICONS) if ic == profile.icon), 0)
             self.icon_combo.setCurrentIndex(idx)
-        self.icon_combo.setStyleSheet("font-size: 18px;")
-        self.icon_combo.setFixedWidth(120)
-        form.addRow("Ikona:", self.icon_combo)
+        self.icon_combo.setFixedWidth(140)
+        form.addRow("CODE:", self.icon_combo)
 
         self.color_combo = QComboBox()
         for hex_val, name in PROFILE_COLORS:
-            self.color_combo.addItem(f"●  {name}", hex_val)
+            self.color_combo.addItem(f"[ {name.upper()} ]", hex_val)
         if profile:
             idx = next(
                 (i for i, (h, _) in enumerate(PROFILE_COLORS) if h == profile.color), 0
             )
             self.color_combo.setCurrentIndex(idx)
-        form.addRow("Kolor:", self.color_combo)
+        form.addRow("COLOR:", self.color_combo)
 
         layout.addLayout(form)
         return frame
@@ -202,7 +201,7 @@ class ProfileEditorDialog(QDialog):
     # ─── Sekcja: Motyw ───────────────────────────────────────────
 
     def _section_theme(self, profile: Profile = None) -> QFrame:
-        frame, layout = self._make_section("🌙  Motyw systemu")
+        frame, layout = self._make_section("THEME  //  SYSTEM  APPEARANCE")
 
         existing_dark: bool | None = None
         if profile:
@@ -211,7 +210,7 @@ class ProfileEditorDialog(QDialog):
                     existing_dark = a.get("dark", True)
                     break
 
-        self.theme_enabled_cb = QCheckBox("Zmień motyw przy aktywacji profilu")
+        self.theme_enabled_cb = QCheckBox("Switch OS theme on profile activation")
         self.theme_enabled_cb.setChecked(existing_dark is not None)
         self.theme_enabled_cb.stateChanged.connect(
             lambda s: self._theme_widget.setVisible(bool(s))
@@ -225,21 +224,24 @@ class ProfileEditorDialog(QDialog):
 
         btn_style = """
             QPushButton {
-                background: #1e293b; color: #94a3b8;
-                border: 1px solid #334155; border-radius: 7px;
-                padding: 8px 24px; font-size: 13px; min-height: 22px;
+                background: #141a44; color: #aab3d8;
+                border: 1px solid #2a3372; border-radius: 0;
+                padding: 9px 24px;
+                font-family: 'JetBrains Mono','Consolas',monospace;
+                font-size: 11px; font-weight: 700; letter-spacing: 2px;
+                min-height: 22px;
             }
             QPushButton:checked {
-                background: #7c3aed; color: #fff; border-color: #7c3aed;
+                background: #3a47d4; color: #e8ecf5; border-color: #7d8aff;
             }
-            QPushButton:hover:!checked { background: #2d3a4a; }
+            QPushButton:hover:!checked { background: #1b2458; color: #e8ecf5; }
         """
-        self._theme_dark_btn = QPushButton("🌙  Ciemny")
+        self._theme_dark_btn = QPushButton("DARK")
         self._theme_dark_btn.setCheckable(True)
         self._theme_dark_btn.setStyleSheet(btn_style)
         self._theme_dark_btn.setChecked(existing_dark is not False)
 
-        self._theme_light_btn = QPushButton("☀️  Jasny")
+        self._theme_light_btn = QPushButton("LIGHT")
         self._theme_light_btn.setCheckable(True)
         self._theme_light_btn.setStyleSheet(btn_style)
         self._theme_light_btn.setChecked(existing_dark is False)
@@ -267,7 +269,7 @@ class ProfileEditorDialog(QDialog):
     # ─── Sekcja: Tapeta ──────────────────────────────────────────
 
     def _section_wallpaper(self, profile: Profile = None) -> QFrame:
-        frame, layout = self._make_section("🖼️  Tapeta pulpitu")
+        frame, layout = self._make_section("WALLPAPER  //  DESKTOP  IMAGE")
 
         existing_path = ""
         if profile:
@@ -276,7 +278,7 @@ class ProfileEditorDialog(QDialog):
                     existing_path = a.get("image_path", "")
                     break
 
-        self.wallpaper_enabled_cb = QCheckBox("Zmień tapetę przy aktywacji profilu")
+        self.wallpaper_enabled_cb = QCheckBox("Set wallpaper on profile activation")
         self.wallpaper_enabled_cb.setChecked(bool(existing_path))
         self.wallpaper_enabled_cb.stateChanged.connect(
             lambda s: self._wp_widget.setVisible(bool(s))
@@ -289,11 +291,11 @@ class ProfileEditorDialog(QDialog):
         wl.setSpacing(8)
 
         self._wp_path_edit = QLineEdit(existing_path)
-        self._wp_path_edit.setPlaceholderText("Ścieżka do obrazu (jpg / png / bmp)...")
+        self._wp_path_edit.setPlaceholderText("path to image (jpg / png / bmp)...")
         self._wp_path_edit.setReadOnly(False)
         wl.addWidget(self._wp_path_edit, 1)
 
-        browse_btn = QPushButton("📁  Przeglądaj...")
+        browse_btn = QPushButton("BROWSE")
         browse_btn.setMinimumHeight(36)
         browse_btn.clicked.connect(self._on_browse_wallpaper)
         wl.addWidget(browse_btn)
@@ -306,9 +308,9 @@ class ProfileEditorDialog(QDialog):
     def _on_browse_wallpaper(self):
         path, _ = QFileDialog.getOpenFileName(
             self,
-            "Wybierz tapetę",
+            "SELECT WALLPAPER",
             os.path.expanduser("~"),
-            "Obrazy (*.jpg *.jpeg *.png *.bmp *.webp);;Wszystkie pliki (*.*)",
+            "Images (*.jpg *.jpeg *.png *.bmp *.webp);;All files (*.*)",
         )
         if path:
             self._wp_path_edit.setText(path)
@@ -316,10 +318,10 @@ class ProfileEditorDialog(QDialog):
     # ─── Sekcja: Zablokowane aplikacje ──────────────────────────
 
     def _section_apps(self, profile: Profile = None) -> QFrame:
-        frame, layout = self._make_section("🚫  Zablokowane aplikacje")
+        frame, layout = self._make_section("APPS  //  BLOCKED  PROCESSES")
 
         hint = QLabel(
-            "Zaznaczone aplikacje będą zamykane gdy profil jest aktywny."
+            "Checked processes will be terminated while this profile is active."
         )
         hint.setWordWrap(True)
         hint.setStyleSheet("color: #64748b; font-size: 11px;")
@@ -334,13 +336,13 @@ class ProfileEditorDialog(QDialog):
         # Wyszukiwarka + odśwież
         search_row = QHBoxLayout()
         self._search_edit = QLineEdit()
-        self._search_edit.setPlaceholderText("🔍  Szukaj aplikacji...")
+        self._search_edit.setPlaceholderText("search processes...")
         self._search_edit.textChanged.connect(self._filter_apps)
         search_row.addWidget(self._search_edit, 1)
 
-        refresh_btn = QPushButton("🔄  Odśwież")
+        refresh_btn = QPushButton("RELOAD")
         refresh_btn.setMinimumHeight(36)
-        refresh_btn.setToolTip("Odśwież listę uruchomionych aplikacji")
+        refresh_btn.setToolTip("Refresh running application list")
         refresh_btn.clicked.connect(self._refresh_apps)
         search_row.addWidget(refresh_btn)
         layout.addLayout(search_row)
@@ -351,9 +353,9 @@ class ProfileEditorDialog(QDialog):
         apps_scroll.setFixedHeight(260)
         apps_scroll.setStyleSheet("""
             QScrollArea {
-                border: 1px solid #334155;
-                border-radius: 8px;
-                background: #0f172a;
+                border: 1px solid #2a3372;
+                border-radius: 0;
+                background: #0d1230;
             }
         """)
 
@@ -393,7 +395,7 @@ class ProfileEditorDialog(QDialog):
 
         # Sekcja 1: uruchomione teraz
         if running_apps:
-            self._add_section_label("Uruchomione teraz")
+            self._add_section_label("RUNNING  NOW")
             for app in running_apps:
                 self._add_app_row(
                     app["process_name"], app["display_name"],
@@ -410,11 +412,11 @@ class ProfileEditorDialog(QDialog):
             if running_apps:
                 sep = QFrame()
                 sep.setFrameShape(QFrame.Shape.HLine)
-                sep.setStyleSheet("QFrame { color: #1e293b; margin: 6px 0; }")
+                sep.setStyleSheet("QFrame { color: #2a3372; margin: 6px 0; }")
                 self._apps_layout.addWidget(sep)
 
             # Etykieta sekcji – dokładnie raz
-            self._add_section_label("Znane aplikacje")
+            self._add_section_label("KNOWN  APPLICATIONS")
             for app in known_apps:
                 self._add_app_row(
                     app["process_name"], app["display_name"],
@@ -429,12 +431,14 @@ class ProfileEditorDialog(QDialog):
 
     def _add_app_row(self, proc_name: str, display_name: str,
                      is_running: bool, checked: bool):
-        prefix = "🟢  " if is_running else "      "
+        prefix = "[ LIVE ]  " if is_running else "[ ---- ]  "
         cb = QCheckBox(f"{prefix}{display_name}   ({proc_name})")
         cb.setChecked(checked)
+        color = "#7d8aff" if is_running else "#aab3d8"
         cb.setStyleSheet(
-            "color: #f1f5f9; font-size: 12px; padding: 4px 0;"
-            " background: transparent;"
+            f"color: {color}; font-size: 11px; padding: 4px 0;"
+            "font-family: 'JetBrains Mono','Consolas',monospace;"
+            " letter-spacing: 0.5px; background: transparent;"
         )
         self._app_rows.append((cb, proc_name, display_name))
         self._apps_layout.addWidget(cb)
@@ -442,9 +446,10 @@ class ProfileEditorDialog(QDialog):
     def _add_section_label(self, text: str):
         lbl = QLabel(text)
         lbl.setStyleSheet(
-            "color: #475569; font-size: 10px; font-weight: bold;"
-            " text-transform: uppercase; letter-spacing: 1px;"
-            " padding: 4px 0 2px 0; background: transparent;"
+            "color: #7d8aff; font-size: 9px; font-weight: 700;"
+            "font-family: 'JetBrains Mono','Consolas',monospace;"
+            " letter-spacing: 3px;"
+            " padding: 8px 0 4px 0; background: transparent;"
         )
         self._apps_layout.addWidget(lbl)
 
@@ -467,9 +472,9 @@ class ProfileEditorDialog(QDialog):
     # ─── Sekcja: Zablokowane strony www ─────────────────────────
 
     def _section_websites(self, profile: Profile = None) -> QFrame:
-        frame, layout = self._make_section("🌐  Zablokowane strony www")
+        frame, layout = self._make_section("WEB  //  BLOCKED  DOMAINS")
 
-        hint = QLabel("Strony zablokowane przez rozszerzenie Chrome gdy profil jest aktywny.")
+        hint = QLabel("Domains blocked by the Chrome extension while profile is active.")
         hint.setWordWrap(True)
         hint.setStyleSheet("color: #64748b; font-size: 11px;")
         layout.addWidget(hint)
@@ -485,9 +490,9 @@ class ProfileEditorDialog(QDialog):
         sites_scroll.setFixedHeight(160)
         sites_scroll.setStyleSheet("""
             QScrollArea {
-                border: 1px solid #334155;
-                border-radius: 8px;
-                background: #0f172a;
+                border: 1px solid #2a3372;
+                border-radius: 0;
+                background: #0d1230;
             }
         """)
         sites_scroll.setWidget(self._sites_container)
@@ -502,11 +507,11 @@ class ProfileEditorDialog(QDialog):
         # Wiersz dodawania
         add_row = QHBoxLayout()
         self._site_input = QLineEdit()
-        self._site_input.setPlaceholderText("np. facebook.com lub reddit.com/r/...")
+        self._site_input.setPlaceholderText("e.g. facebook.com  or  reddit.com/r/...")
         self._site_input.setMinimumHeight(36)
         add_row.addWidget(self._site_input, 1)
 
-        add_site_btn = QPushButton("➕  Dodaj")
+        add_site_btn = QPushButton("+  ADD")
         add_site_btn.setMinimumHeight(36)
         add_site_btn.clicked.connect(self._on_add_site)
         add_row.addWidget(add_site_btn)
@@ -514,6 +519,7 @@ class ProfileEditorDialog(QDialog):
 
         self._site_input.returnPressed.connect(self._on_add_site)
 
+        # Zabezpieczenie hasłem
         return frame
 
     # ─── Sekcja: Ochrona hasłem ─────────────────────────────────
@@ -549,7 +555,7 @@ class ProfileEditorDialog(QDialog):
         )
         self._password_edit.setPlaceholderText(placeholder)
         self._password_edit.setMinimumHeight(36)
-        ll.addRow("Hasło:", self._password_edit)
+        ll.addRow("PASSWORD:", self._password_edit)
 
         layout.addWidget(self._lock_widget)
         self._lock_widget.setVisible(self.lock_cb.isChecked())
@@ -560,11 +566,12 @@ class ProfileEditorDialog(QDialog):
         row = QWidget()
         row.setStyleSheet("""
             QWidget#siteRow {
-                background: #1e293b;
-                border-radius: 8px;
-                border: 1px solid #334155;
+                background: #141a44;
+                border-radius: 0;
+                border: 1px solid #2a3372;
+                border-left: 2px solid #5968ff;
             }
-            QWidget#siteRow:hover { background: #263548; }
+            QWidget#siteRow:hover { background: #1b2458; border-left-color: #7d8aff; }
         """)
         row.setObjectName("siteRow")
         row.setFixedHeight(36)
@@ -573,37 +580,44 @@ class ProfileEditorDialog(QDialog):
         rl.setContentsMargins(10, 0, 6, 0)
         rl.setSpacing(8)
 
-        globe = QLabel("🌐")
-        globe.setStyleSheet("background: transparent; font-size: 13px;")
-        rl.addWidget(globe)
+        marker = QLabel("URL")
+        marker.setStyleSheet(
+            "background: transparent; color: #7d8aff; font-size: 9px;"
+            "font-family: 'JetBrains Mono','Consolas',monospace;"
+            "font-weight: 700; letter-spacing: 2px;"
+        )
+        rl.addWidget(marker)
 
         lbl = QLabel(site)
         lbl.setStyleSheet(
-            "color: #e2e8f0; font-size: 12px; background: transparent;"
+            "color: #e8ecf5; font-size: 11px; background: transparent;"
+            "font-family: 'JetBrains Mono','Consolas',monospace;"
         )
         rl.addWidget(lbl, 1)
 
-        del_btn = QPushButton("🗑  Usuń")
+        del_btn = QPushButton("REMOVE")
         del_btn.setFixedHeight(28)
         del_btn.setMinimumWidth(82)
         del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         del_btn.setStyleSheet("""
             QPushButton {
-                background: rgba(239, 68, 68, 0.12);
-                color: #fca5a5;
-                border: 1px solid rgba(239, 68, 68, 0.35);
-                border-radius: 6px;
+                background: transparent;
+                color: #e5484d;
+                border: 1px solid rgba(229, 72, 77, 0.45);
+                border-radius: 0;
                 padding: 2px 10px;
-                font-size: 11px;
-                font-weight: bold;
+                font-family: 'JetBrains Mono','Consolas',monospace;
+                font-size: 9px;
+                font-weight: 700;
+                letter-spacing: 2px;
             }
             QPushButton:hover {
-                background: #ef4444;
-                color: #fff;
-                border-color: #ef4444;
+                background: #e5484d;
+                color: #e8ecf5;
+                border-color: #e5484d;
             }
             QPushButton:pressed {
-                background: #dc2626;
+                background: #b83238;
             }
         """)
         del_btn.clicked.connect(lambda: self._remove_site_row(site, row))
@@ -646,7 +660,7 @@ class ProfileEditorDialog(QDialog):
     def _on_save(self):
         name = self.name_edit.text().strip()
         if not name:
-            QMessageBox.warning(self, "Błąd", "Nazwa profilu jest wymagana!")
+            QMessageBox.warning(self, "ERROR", "Profile name is required.")
             return
 
         actions: list[dict] = []

@@ -11,7 +11,6 @@ const $ = (id) => document.getElementById(id);
 // Hasło odblokowania (tylko w pamięci popupa, przepada po zamknięciu)
 let unlockPassword = "";
 let currentProfileName = "";
-
 // ---------- Komunikacja z serwerem ----------------------------------------
 async function fetchState() {
   const res = await fetch(`${API}/state`, { cache: "no-store" });
