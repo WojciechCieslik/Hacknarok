@@ -1,0 +1,6 @@
+{
+  "mongodb_uri": "mongodb+srv://USER:PASS@cluster.xxxxx.mongodb.net/?retryWrites=true&w=majority",
+  "mongodb_db": "timeguard",
+  "user_id": "user_demo",
+  "sync_interval_sec": 60
+}

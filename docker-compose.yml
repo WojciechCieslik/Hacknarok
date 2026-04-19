@@ -1,0 +1,14 @@
+services:
+  mongodb:
+    image: mongo:7
+    container_name: timeguard_mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - timeguard_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: timeguard
+
+volumes:
+  timeguard_data:

@@ -1,5 +1,8 @@
 hacknarok_venv/
-data/
+testvenv/
+
+# Lokalna konfiguracja – może zawierać credentials (MongoDB Atlas URI itp.)
+data/config.json
 
 # Python cache
 **/__pycache__/
