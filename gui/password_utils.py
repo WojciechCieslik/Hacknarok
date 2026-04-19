@@ -1,18 +1,18 @@
-"""Pomocnik: weryfikacja hasła profilu przez dialog."""
+"""Password verification dialog helper."""
 
 from PySide6.QtWidgets import QInputDialog, QLineEdit, QMessageBox
 
 
-def request_profile_password(parent, profile, reason: str = "kontynuować") -> bool:
-    """Zwróć True jeśli profil jest odblokowany lub użytkownik podał poprawne hasło."""
+def request_profile_password(parent, profile, reason: str = "continue") -> bool:
+    """Return True if the profile is unlocked or the user provided the correct password."""
     if not profile or not profile.locked or not profile.password_hash:
         return True
 
     pw, ok = QInputDialog.getText(
         parent,
-        "Profil chroniony hasłem",
-        f"Profil '{profile.name}' jest chroniony hasłem.\n"
-        f"Wpisz hasło aby {reason}:",
+        "Password Protected Profile",
+        f"Profile '{profile.name}' is password protected.\n"
+        f"Enter password to {reason}:",
         QLineEdit.EchoMode.Password,
     )
     if not ok:
@@ -20,6 +20,6 @@ def request_profile_password(parent, profile, reason: str = "kontynuować") -> b
     if profile.verify_password(pw):
         return True
     QMessageBox.warning(
-        parent, "Błędne hasło", "Podane hasło jest nieprawidłowe."
+        parent, "Wrong Password", "The password you entered is incorrect."
     )
     return False

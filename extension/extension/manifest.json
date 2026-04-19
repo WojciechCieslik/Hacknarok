@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Context Switcher Pro – Bloker Stron",
+  "name": "Time Guard – Site Blocker",
   "version": "2.0",
-  "description": "Blokuje strony dla aktywnego profilu Context Switcher Pro. Pozwala dodawać/usuwać strony z poziomu przeglądarki.",
+  "description": "Blocks sites for the active Time Guard profile. Allows adding/removing sites directly from the browser.",
 
   "permissions": [
     "declarativeNetRequest",

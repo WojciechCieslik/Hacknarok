@@ -113,8 +113,8 @@ for (const evName of ["yt-navigate-finish", "yt-page-data-updated"]) {
 setInterval(onUrlMaybeChanged, 500);
 
 // ---------------------------------------------------------------------------
-// Cykliczne odświeżanie listy co 30 s
-// (żeby zmiana profilu w Context Switcher Pro była widoczna bez reloadu strony)
+// Periodic list refresh every 30 s
+// (so that a profile change in Time Guard is visible without reloading the page)
 // ---------------------------------------------------------------------------
 setInterval(loadState, 30000);
 
