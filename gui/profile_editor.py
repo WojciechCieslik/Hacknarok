@@ -6,8 +6,10 @@ Sekcje: podstawy, motyw, tapeta, zablokowane aplikacje, strony www.
 
 import hashlib
 import os
+import re
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QRegularExpression
+from PySide6.QtGui import QRegularExpressionValidator
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
     QLabel, QLineEdit, QPushButton, QComboBox,
@@ -20,12 +22,6 @@ from core.system_controller import SystemController
 from gui.styles import COLORS
 
 # ─── Stałe ──────────────────────────────────────────────────────────
-
-PROFILE_ICONS = [
-    "WRK", "STD", "FOC", "DEV", "OPS", "LAB", "BLD", "SYS",
-    "FUN", "GME", "MUS", "ART", "REC", "CHL", "EAT", "NAP",
-    "RUN", "GYM", "OUT", "ZEN",
-]
 
 PROFILE_COLORS = [
     ("#3b82f6", "Blue"),
@@ -151,6 +147,10 @@ class ProfileEditorDialog(QDialog):
 
         root.addWidget(btn_bar)
 
+    @staticmethod
+    def _code_from_name(name: str) -> str:
+        return re.sub(r"[^A-Za-z0-9]", "", name)[:3].upper()
+
     # ─── Pomocnik ramki sekcji ───────────────────────────────────
 
     def _make_section(self, title: str) -> tuple[QFrame, QVBoxLayout]:
@@ -179,14 +179,30 @@ class ProfileEditorDialog(QDialog):
         self.name_edit.setPlaceholderText("profile name...")
         form.addRow("NAME:", self.name_edit)
 
-        self.icon_combo = QComboBox()
-        for ico in PROFILE_ICONS:
-            self.icon_combo.addItem(ico, ico)
-        if profile:
-            idx = next((i for i, ic in enumerate(PROFILE_ICONS) if ic == profile.icon), 0)
-            self.icon_combo.setCurrentIndex(idx)
-        self.icon_combo.setFixedWidth(140)
-        form.addRow("CODE:", self.icon_combo)
+        existing_icon = profile.icon if profile else ""
+        clean_icon = re.sub(r"[^A-Za-z0-9]", "", existing_icon)[:3].upper()
+        default_code = clean_icon or self._code_from_name(profile.name if profile else "")
+
+        self.icon_edit = QLineEdit(default_code)
+        self.icon_edit.setPlaceholderText("ABC")
+        self.icon_edit.setFixedWidth(80)
+        self.icon_edit.setMaxLength(3)
+        self.icon_edit.setValidator(
+            QRegularExpressionValidator(QRegularExpression("[A-Za-z0-9]{0,3}"))
+        )
+        self._icon_user_edited = bool(clean_icon)
+
+        def _on_icon_changed(text):
+            self._icon_user_edited = bool(text)
+
+        def _on_name_changed(name):
+            if not self._icon_user_edited:
+                self.icon_edit.setText(self._code_from_name(name))
+
+        self.icon_edit.textEdited.connect(_on_icon_changed)
+        self.name_edit.textChanged.connect(_on_name_changed)
+
+        form.addRow("CODE:", self.icon_edit)
 
         self.color_combo = QComboBox()
         for hex_val, name in PROFILE_COLORS:
@@ -833,9 +849,11 @@ class ProfileEditorDialog(QDialog):
             elif self._editing and self._editing.locked:
                 password_hash = self._editing.password_hash
 
+        code = self.icon_edit.text().strip().upper() or self._code_from_name(name)
+
         data = {
             "name": name,
-            "icon": self.icon_combo.currentData(),
+            "icon": code,
             "color": self.color_combo.currentData(),
             "description": "",
             "actions": actions,
