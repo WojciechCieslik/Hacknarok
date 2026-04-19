@@ -1,8 +1,8 @@
 """
-Context Switcher Pro – Punkt wejścia aplikacji.
+Time Guard – Application entry point.
 
-Samo-enforsujący się planer dnia – kontroluj swoje środowisko i przebodźcowanie.
-Jednym kliknięciem przełącz się między „Praca", „Nauka", „Rozrywka".
+Self-enforcing daily planner – control your environment and focus.
+Switch between Work, Study, and Entertainment with one click.
 """
 
 import sys
@@ -16,7 +16,7 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     datefmt="%H:%M:%S",
 )
-logger = logging.getLogger("ContextSwitcherPro")
+logger = logging.getLogger("TimeGuard")
 
 # Dodaj katalog projektu do ścieżki
 _ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -42,9 +42,9 @@ def main():
     from gui.styles import MAIN_STYLESHEET
 
     app = QApplication(sys.argv)
-    app.setApplicationName("Context Switcher Pro")
-    app.setOrganizationName("ContextSwitcherPro")
-    app.setApplicationDisplayName("Context Switcher Pro")
+    app.setApplicationName("Time Guard")
+    app.setOrganizationName("TimeGuard")
+    app.setApplicationDisplayName("Time Guard")
 
     # Czcionka domyślna
     font = QFont("Segoe UI", 10)
@@ -62,7 +62,7 @@ def main():
     window = MainWindow()
     window.show()
 
-    logger.info("Context Switcher Pro uruchomiony")
+    logger.info("Time Guard started")
     sys.exit(app.exec())
 
 

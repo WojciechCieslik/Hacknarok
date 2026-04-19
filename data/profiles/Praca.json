@@ -1,13 +1,9 @@
 {
   "name": "Praca",
-  "icon": "🏢",
+  "icon": "WRK",
   "color": "#3b82f6",
   "description": "",
   "actions": [
-    {
-      "level": 7,
-      "type": "set_volume"
-    },
     {
       "dark": true,
       "type": "set_theme"
@@ -17,5 +13,8 @@
       "process_name": "Spotify.exe",
       "type": "block_process"
     }
+  ],
+  "blocked_sites": [
+    "facebook.com"
   ]
 }

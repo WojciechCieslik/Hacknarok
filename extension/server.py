@@ -1,17 +1,17 @@
 """
-Serwer dla rozszerzenia Bloker Stron / Context Switcher Pro.
+Server for Time Guard – Site Blocker extension.
 
-Źródłem prawdy są pliki data/profiles/*.json oraz data/active.json
-zarządzane przez główną aplikację Context Switcher Pro.
+Source of truth: data/profiles/*.json and data/active.json
+managed by the main Time Guard application.
 
-Endpointy:
-  GET    /state               -> aktywny profil + jego dane + lista profili
-  GET    /blocked             -> lista zablokowanych stron dla aktywnego profilu
-  POST   /blocked             -> { site, password? } dodaje stronę do profilu
-  DELETE /blocked             -> { site, password? } usuwa stronę z profilu
-  GET    /profiles            -> wszystkie profile
-  POST   /active-profile      -> { profile } zmienia aktywny profil
-  GET    /health              -> status serwera
+Endpoints:
+  GET    /state               -> active profile + its data + profile list
+  GET    /blocked             -> blocked sites for the active profile
+  POST   /blocked             -> { site, password? } adds site to profile
+  DELETE /blocked             -> { site, password? } removes site from profile
+  GET    /profiles            -> all profiles
+  POST   /active-profile      -> { profile } changes the active profile
+  GET    /health              -> server status
 """
 
 import hashlib
@@ -183,7 +183,7 @@ def add_blocked():
     password = body.get("password", "")
 
     if not site:
-        return jsonify({"error": "Brak lub nieprawidłowe pole 'site'"}), 400
+        return jsonify({"error": "Missing or invalid 'site' field"}), 400
 
     with FILE_LOCK:
         profiles = _list_profiles()
@@ -191,22 +191,22 @@ def add_blocked():
         if not active_name or active_name not in profiles:
             active_name = next(iter(profiles), None)
         if not active_name:
-            return jsonify({"error": "Brak aktywnego profilu"}), 404
+            return jsonify({"error": "No active profile"}), 404
 
         profile = profiles[active_name]
 
         if profile.get("locked", False):
             if not password or not verify_password(profile, password):
-                return jsonify({"error": "Profil chroniony hasłem"}), 403
+                return jsonify({"error": "Profile is password protected"}), 403
 
         sites = profile.setdefault("blocked_sites", [])
         if site in sites:
-            return jsonify({"ok": True, "site": site, "message": "Już zablokowana"}), 200
+            return jsonify({"ok": True, "site": site, "message": "Already blocked"}), 200
 
         sites.append(site)
         _write_profile(profile)
 
-    print(f"[+] {active_name}: dodano '{site}'")
+    print(f"[+] {active_name}: added '{site}'")
     return jsonify({"ok": True, "site": site, "profile": active_name}), 201
 
 
@@ -217,7 +217,7 @@ def remove_blocked():
     password = body.get("password", "")
 
     if not site:
-        return jsonify({"error": "Brak lub nieprawidłowe pole 'site'"}), 400
+        return jsonify({"error": "Missing or invalid 'site' field"}), 400
 
     with FILE_LOCK:
         profiles = _list_profiles()
@@ -225,23 +225,23 @@ def remove_blocked():
         if not active_name or active_name not in profiles:
             active_name = next(iter(profiles), None)
         if not active_name:
-            return jsonify({"error": "Brak aktywnego profilu"}), 404
+            return jsonify({"error": "No active profile"}), 404
 
         profile = profiles[active_name]
 
         if profile.get("locked", False):
             if not password or not verify_password(profile, password):
-                return jsonify({"error": "Profil chroniony hasłem"}), 403
+                return jsonify({"error": "Profile is password protected"}), 403
 
         sites = profile.get("blocked_sites", [])
         if site not in sites:
-            return jsonify({"ok": True, "site": site, "message": "Nie było zablokowane"}), 200
+            return jsonify({"ok": True, "site": site, "message": "Not blocked"}), 200
 
         sites.remove(site)
         profile["blocked_sites"] = sites
         _write_profile(profile)
 
-    print(f"[-] {active_name}: usunięto '{site}'")
+    print(f"[-] {active_name}: removed '{site}'")
     return jsonify({"ok": True, "site": site, "profile": active_name}), 200
 
 
@@ -257,16 +257,16 @@ def set_active_profile():
     body = request.get_json(silent=True) or {}
     name = body.get("profile", "").strip()
     if not name:
-        return jsonify({"error": "Brak pola 'profile'"}), 400
+        return jsonify({"error": "Missing 'profile' field"}), 400
 
     with FILE_LOCK:
         profiles = _list_profiles()
         if name not in profiles:
-            return jsonify({"error": f"Profil '{name}' nie istnieje"}), 404
+            return jsonify({"error": f"Profile '{name}' does not exist"}), 404
         _write_active_name(name)
         profile = profiles[name]
 
-    print(f"[→] Aktywny profil: {name}")
+    print(f"[→] Active profile: {name}")
     return jsonify({"ok": True, "activeProfile": name,
                     "profile": _profile_for_extension(profile)}), 200
 
@@ -287,14 +287,14 @@ if __name__ == "__main__":
         active_name = next(iter(profiles), None)
 
     print("=" * 55)
-    print(" Serwer Bloker Stron – Context Switcher Pro")
+    print(" Time Guard – Site Blocker Server")
     print("=" * 55)
     print(f" URL:             http://localhost:8765")
-    print(f" Aktywny profil:  {active_name or '(brak)'}")
-    print(f" Dostępne:        {', '.join(profiles.keys()) or '(brak profili)'}")
+    print(f" Active profile:  {active_name or '(none)'}")
+    print(f" Available:       {', '.join(profiles.keys()) or '(no profiles)'}")
     if active_name and active_name in profiles:
         sites = profiles[active_name].get("blocked_sites", [])
-        print(f" Zablokowane ({len(sites)}):")
+        print(f" Blocked ({len(sites)}):")
         for s in sites:
             print(f"    • {s}")
     print(f" Katalog profili: {PROFILES_DIR}")

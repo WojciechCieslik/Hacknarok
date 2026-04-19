@@ -1,44 +1,44 @@
 <!DOCTYPE html>
-<html lang="pl">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Bloker Stron</title>
+  <title>Site Blocker</title>
   <link rel="stylesheet" href="popup.css" />
 </head>
 <body>
   <header>
     <div class="header-row">
-      <h2>Bloker Stron</h2>
+      <h2>Time Guard - Site Blocker</h2>
       <span id="profile-badge" class="badge">…</span>
     </div>
-    <div id="server-status" class="status">Łączenie…</div>
+    <div id="server-status" class="status">Connecting…</div>
   </header>
 
-  <div id="lock-notice" class="lock-notice" hidden>🔒 Profil chroniony hasłem</div>
+  <div id="lock-notice" class="lock-notice" hidden>🔒 Profile protected by password</div>
 
   <section id="unlock-box" class="add-box" hidden>
     <input
       id="password-input"
       type="password"
-      placeholder="Wpisz hasło profilu..."
+      placeholder="Enter profile password..."
       autocomplete="off"
     />
-    <button id="unlock-btn">Odblokuj</button>
+    <button id="unlock-btn">Unlock</button>
   </section>
 
   <section class="add-box">
     <input
       id="site-input"
       type="text"
-      placeholder="np. twitter.com lub youtube.com/shorts"
+      placeholder="e.g. twitter.com or youtube.com/shorts"
       spellcheck="false"
       autocomplete="off"
     />
-    <button id="add-btn">Zablokuj</button>
+    <button id="add-btn">Block</button>
   </section>
 
   <button id="list-toggle" class="list-toggle" aria-expanded="false">
-    <span id="list-title">Zablokowane</span>
+    <span id="list-title">Blocked</span>
     <span id="list-arrow" class="arrow">▸</span>
   </button>
   <ul id="list" hidden></ul>

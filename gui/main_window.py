@@ -1,5 +1,5 @@
 """
-MainWindow – industrialny panel kontrolny Context Switcher Pro.
+MainWindow – industrial control panel for Time Guard.
 """
 
 import os
@@ -28,11 +28,11 @@ _ICON_PATH = os.path.join(
 
 
 class MainWindow(QMainWindow):
-    """Główne okno Context Switcher Pro."""
+    """Main window for Time Guard."""
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("CONTEXT SWITCHER // PRO")
+        self.setWindowTitle("TIME GUARD")
         self.setMinimumSize(960, 720)
         self.resize(1080, 800)
         if os.path.exists(_ICON_PATH):
@@ -137,11 +137,11 @@ class MainWindow(QMainWindow):
         title_col = QVBoxLayout()
         title_col.setSpacing(4)
 
-        title = QLabel("CONTEXT  SWITCHER")
+        title = QLabel("TIMEGUARD")
         title.setObjectName("titleLabel")
         title_col.addWidget(title)
 
-        subtitle = QLabel("SELF-ENFORCING  ENVIRONMENT  CONTROL  UNIT")
+        subtitle = QLabel("Guard Your Focus, Guide Your Day.")
         subtitle.setObjectName("subtitleLabel")
         title_col.addWidget(subtitle)
 
@@ -191,7 +191,7 @@ class MainWindow(QMainWindow):
         info_layout.addWidget(info_title)
 
         info_text = QLabel(
-            "Context Switcher Pro is a self-enforcing daily planner.\n"
+            "Time Guard is a self-enforcing daily planner.\n"
             "One actuation switches the entire environment between operating modes.\n\n"
             "FEATURES\n"
             "   -  Profile management (wallpaper, theme, app launch / termination)\n"
@@ -214,13 +214,13 @@ class MainWindow(QMainWindow):
 
     def _build_status_bar(self):
         status_bar = self.statusBar()
-        status_bar.showMessage("READY  //  CONTEXT SWITCHER PRO  //  v1.0")
+        status_bar.showMessage("READY  //  TIME GUARD  //  v1.0")
 
     def _setup_tray(self):
         self.tray_icon = QSystemTrayIcon(self)
         if os.path.exists(_ICON_PATH):
             self.tray_icon.setIcon(QIcon(_ICON_PATH))
-        self.tray_icon.setToolTip("Context Switcher Pro")
+        self.tray_icon.setToolTip("Time Guard")
 
         tray_menu = QMenu()
 
@@ -308,7 +308,7 @@ class MainWindow(QMainWindow):
         else:
             profile = self.profile_manager.get_profile(name)
             if profile and not request_profile_password(
-                self, profile, "aktywować profil"
+                self, profile, "activate profile"
             ):
                 return
             self.profile_manager.switch_profile(name, manual=True)
@@ -316,7 +316,7 @@ class MainWindow(QMainWindow):
     def _manual_deactivate(self):
         active = self.profile_manager.active_profile
         if active and not request_profile_password(
-            self, active, "dezaktywować profil"
+            self, active, "deactivate profile"
         ):
             return
         self.scheduler.notify_manual_deactivation()
@@ -326,7 +326,7 @@ class MainWindow(QMainWindow):
         profile = self.profile_manager.get_profile(name)
         if not profile:
             return
-        if not request_profile_password(self, profile, "edytować profil"):
+        if not request_profile_password(self, profile, "edit profile"):
             return
         dialog = ProfileEditorDialog(profile, self)
         dialog.profileSaved.connect(
@@ -336,7 +336,7 @@ class MainWindow(QMainWindow):
 
     def _on_card_delete(self, name: str):
         profile = self.profile_manager.get_profile(name)
-        if profile and not request_profile_password(self, profile, "usunąć profil"):
+        if profile and not request_profile_password(self, profile, "remove profile"):
             return
         reply = QMessageBox.question(
             self,

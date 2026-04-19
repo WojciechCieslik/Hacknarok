@@ -1,14 +1,14 @@
-// popup.js – logika popupa rozszerzenia
+// popup.js – extension popup logic
 // ---------------------------------------------------------------------------
-//  - Pokazuje aktywny profil (z koloru ustawionego w Context Switcher Pro)
-//  - Auto-wypełnia input domeną aktualnej karty
-//  - Pozwala dodać i usunąć stronę z bieżącego profilu
+//  - Shows the active profile (using the color set in Time Guard)
+//  - Auto-fills the input with the current tab's domain
+//  - Allows adding and removing sites from the current profile
 // ---------------------------------------------------------------------------
 
 const API = "http://localhost:8765";
 const $ = (id) => document.getElementById(id);
 
-// Hasło odblokowania (tylko w pamięci popupa, przepada po zamknięciu)
+// Unlock password (in-memory only, cleared when popup closes)
 let unlockPassword = "";
 let currentProfileName = "";
 // ---------- Komunikacja z serwerem ----------------------------------------
@@ -89,12 +89,12 @@ async function render() {
   try {
     const state = await fetchState();
 
-    statusEl.textContent = "Połączono z serwerem";
+    statusEl.textContent = "Connected to server";
     statusEl.className = "status online";
 
     const locked = !!(state.profile && state.profile.locked);
 
-    // Jeśli zmienił się profil – wyczyść wpisane wcześniej hasło
+    // Clear saved password when the active profile changes
     if (state.activeProfile !== currentProfileName) {
       currentProfileName = state.activeProfile;
       unlockPassword = "";
@@ -112,12 +112,12 @@ async function render() {
     $("add-btn").disabled = !unlocked;
 
     const sites = (state.profile && state.profile.blockedSites) || [];
-    title.textContent = `Zablokowane (${sites.length})`;
+    title.textContent = `Blocked (${sites.length})`;
 
     list.innerHTML = "";
 
     if (sites.length === 0) {
-      list.innerHTML = '<li class="empty">Brak zablokowanych stron</li>';
+      list.innerHTML = '<li class="empty">No blocked sites</li>';
       return;
     }
 
@@ -134,17 +134,17 @@ async function render() {
       if (unlocked) {
         const btn = document.createElement("button");
         btn.className = "del-btn";
-        btn.textContent = "Usuń";
-        btn.title = "Usuń";
+        btn.textContent = "Remove";
+        btn.title = "Remove";
         btn.addEventListener("click", async () => {
           btn.disabled = true;
           try {
             await removeSite(site);
-            showStatus(`Usunięto: ${site}`, "success");
+            showStatus(`Removed: ${site}`, "success");
             await render();
             chrome.runtime.sendMessage({ type: "SYNC_NOW" });
           } catch (e) {
-            showStatus("Błąd: " + e.message, "error");
+            showStatus("Error: " + e.message, "error");
             btn.disabled = false;
           }
         });
@@ -154,9 +154,9 @@ async function render() {
       list.appendChild(li);
     });
   } catch (e) {
-    statusEl.textContent = "Brak połączenia z serwerem Python";
+    statusEl.textContent = "No connection to Python server";
     statusEl.className = "status offline";
-    list.innerHTML = '<li class="empty">Uruchom server.py</li>';
+    list.innerHTML = '<li class="empty">Start server.py</li>';
     badge.textContent = "?";
     badge.style.background = "#555";
   }
@@ -171,14 +171,14 @@ $("add-btn").addEventListener("click", async () => {
   try {
     const data = await addSite(site);
     input.value = "";
-    const msg = data.message === "Już zablokowana"
-      ? `Już zablokowana: ${data.site}`
-      : `Zablokowano: ${data.site}`;
+    const msg = data.message === "Already blocked"
+      ? `Already blocked: ${data.site}`
+      : `Blocked: ${data.site}`;
     showStatus(msg, "success");
     await render();
     chrome.runtime.sendMessage({ type: "SYNC_NOW" });
   } catch (e) {
-    showStatus("Błąd: " + e.message, "error");
+    showStatus("Error: " + e.message, "error");
   }
 });
 
@@ -186,7 +186,7 @@ $("site-input").addEventListener("keypress", (e) => {
   if (e.key === "Enter") $("add-btn").click();
 });
 
-// Odblokowanie hasłem – zweryfikuj przez próbę usunięcia nieistniejącej strony
+// Unlock via password – verify by attempting to remove a non-existent site
 $("unlock-btn").addEventListener("click", async () => {
   const pw = $("password-input").value;
   if (!pw) return;
@@ -195,24 +195,24 @@ $("unlock-btn").addEventListener("click", async () => {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        site: "__verify__.context-switcher-pro.invalid",
+        site: "__verify__.time-guard.invalid",
         password: pw,
       }),
     });
     if (res.status === 403) {
-      showStatus("Nieprawidłowe hasło", "error");
+      showStatus("Invalid password", "error");
       return;
     }
     if (!res.ok) {
-      showStatus("Błąd weryfikacji hasła", "error");
+      showStatus("Password verification error", "error");
       return;
     }
     unlockPassword = pw;
     $("password-input").value = "";
-    showStatus("Odblokowano", "success");
+    showStatus("Unlocked", "success");
     await render();
   } catch (e) {
-    showStatus("Błąd: " + e.message, "error");
+    showStatus("Error: " + e.message, "error");
   }
 });
 

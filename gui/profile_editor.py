@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from core.profile_manager import Profile
 from core.system_controller import SystemController
+from gui.styles import COLORS
 
 # ─── Stałe ──────────────────────────────────────────────────────────
 
@@ -79,7 +80,7 @@ class ProfileEditorDialog(QDialog):
 
     def __init__(self, profile: Profile = None, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Edytuj profil" if profile else "Nowy profil")
+        self.setWindowTitle("Edit Profile" if profile else "New Profile")
         self.setMinimumSize(560, 480)
         self.resize(640, 620)
         if parent is not None:
@@ -525,18 +526,21 @@ class ProfileEditorDialog(QDialog):
     # ─── Sekcja: Ochrona hasłem ─────────────────────────────────
 
     def _section_password(self, profile: Profile = None) -> QFrame:
-        frame, layout = self._make_section("🔒  Ochrona hasłem")
+        frame, layout = self._make_section("PASSWORD  //  SECURITY")
 
         hint = QLabel(
-            "Profil chroniony hasłem wymaga jego podania aby edytować profil, "
-            "dodać/usunąć go z harmonogramu, lub zmienić listę blokowanych stron "
-            "w rozszerzeniu przeglądarki."
+            "A password-protected profile requires the password to edit it, "
+            "add/remove it from the schedule, or modify the blocked-sites list "
+            "in the browser extension."
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet("color: #64748b; font-size: 11px;")
+        hint.setStyleSheet(
+            f"color: {COLORS['text_mute']}; font-size: 11px;"
+            f"font-family: 'JetBrains Mono','Consolas',monospace; letter-spacing: 0.5px;"
+        )
         layout.addWidget(hint)
 
-        self.lock_cb = QCheckBox("Włącz ochronę hasłem")
+        self.lock_cb = QCheckBox("Enable password protection")
         self.lock_cb.setChecked(profile.locked if profile else False)
         self.lock_cb.stateChanged.connect(lambda s: self._lock_widget.setVisible(bool(s)))
         layout.addWidget(self.lock_cb)
@@ -549,9 +553,9 @@ class ProfileEditorDialog(QDialog):
         self._password_edit = QLineEdit()
         self._password_edit.setEchoMode(QLineEdit.EchoMode.Password)
         placeholder = (
-            "Nowe hasło (zostaw puste by zachować aktualne)"
+            "New password (leave empty to keep current)"
             if profile and profile.password_hash
-            else "Ustaw hasło..."
+            else "Set password..."
         )
         self._password_edit.setPlaceholderText(placeholder)
         self._password_edit.setMinimumHeight(36)
