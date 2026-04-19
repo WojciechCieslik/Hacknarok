@@ -28,16 +28,16 @@ PROFILE_ICONS = [
 ]
 
 PROFILE_COLORS = [
-    ("#3b82f6", "Niebieski"),
-    ("#7c3aed", "Fioletowy"),
-    ("#10b981", "Zielony"),
-    ("#f59e0b", "Pomarańczowy"),
-    ("#ef4444", "Czerwony"),
-    ("#06b6d4", "Cyjanowy"),
-    ("#ec4899", "Różowy"),
-    ("#8b5cf6", "Lawendowy"),
-    ("#14b8a6", "Morski"),
-    ("#f97316", "Mandarynkowy"),
+    ("#3b82f6", "Blue"),
+    ("#7c3aed", "Violet"),
+    ("#10b981", "Green"),
+    ("#f59e0b", "Orange"),
+    ("#ef4444", "Red"),
+    ("#06b6d4", "Cyan"),
+    ("#ec4899", "Pink"),
+    ("#8b5cf6", "Lavender"),
+    ("#14b8a6", "Teal"),
+    ("#f97316", "Tangerine"),
 ]
 
 # Popularne aplikacje do blokowania

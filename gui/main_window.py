@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QApplication
 )
 
+from core.mongo_sync import MongoSync
 from core.profile_manager import ProfileManager, Profile
 from core.scheduler import Scheduler
 from gui.password_utils import request_profile_password
@@ -30,9 +31,11 @@ _ICON_PATH = os.path.join(
 class MainWindow(QMainWindow):
     """Main window for Time Guard."""
 
-    def __init__(self):
+    def __init__(self, online: bool = False):
         super().__init__()
-        self.setWindowTitle("TIME GUARD")
+        self.online_mode = online
+        title = "TIME GUARD" + ("  //  ONLINE" if online else "  //  OFFLINE")
+        self.setWindowTitle(title)
         self.setMinimumSize(960, 720)
         self.resize(1080, 800)
         if os.path.exists(_ICON_PATH):
@@ -40,11 +43,28 @@ class MainWindow(QMainWindow):
 
         self.profile_manager = ProfileManager()
         self.scheduler = Scheduler()
+        self.mongo_sync = MongoSync(self) if online else None
+
+        if not online:
+            # Tryb offline: usuń z pamięci wszystko co pochodzi z serwera.
+            # Pliki na dysku pozostają – przy kolejnym uruchomieniu online
+            # zostaną odtworzone / nadpisane przez MongoSync.
+            self.profile_manager.profiles = [
+                p for p in self.profile_manager.profiles if p.source != "server"
+            ]
+            self.scheduler.blocks = [
+                b for b in self.scheduler.blocks if b.source != "server"
+            ]
 
         self.profile_manager.profileChanged.connect(self._on_profile_changed)
         self.profile_manager.profilesUpdated.connect(self._refresh_profiles)
         self.scheduler.scheduleTriggered.connect(self._on_schedule_trigger)
         self.scheduler.scheduleEnded.connect(self._on_schedule_end)
+
+        if self.mongo_sync is not None:
+            self.mongo_sync.syncStarted.connect(self._on_sync_started)
+            self.mongo_sync.syncFinished.connect(self._on_sync_finished)
+            self.mongo_sync.dataUpdated.connect(self._on_cloud_data_updated)
 
         self._block_timer = QTimer(self)
         self._block_timer.setInterval(5000)
@@ -55,6 +75,17 @@ class MainWindow(QMainWindow):
 
         self.scheduler.start()
         self._block_timer.start()
+
+        if self.mongo_sync is None:
+            self._update_sync_label("MODE  //  OFFLINE")
+            if hasattr(self, "sync_button"):
+                self.sync_button.hide()
+        elif self.mongo_sync.is_configured:
+            self.mongo_sync.start_auto_sync()
+        else:
+            self._update_sync_label(
+                "CLOUD  //  NO CONFIG  ·  edytuj  data/config.json"
+            )
 
     def _setup_ui(self):
         central = QWidget()
@@ -152,11 +183,82 @@ class MainWindow(QMainWindow):
         version.setObjectName("brandMark")
         header.addWidget(version, 0, Qt.AlignmentFlag.AlignVCenter)
 
+        self.sync_label = QLabel("CLOUD  //  ...")
+        self.sync_label.setStyleSheet(
+            f"color: {COLORS['chrome_mute']};"
+            f"font-family: 'JetBrains Mono','Consolas',monospace;"
+            f"font-size: 10px; letter-spacing: 1.5px; padding: 0 10px;"
+        )
+        header.addWidget(self.sync_label, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        self.sync_button = QPushButton("SYNC")
+        self.sync_button.setObjectName("syncButton")
+        self.sync_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.sync_button.setStyleSheet(f"""
+            QPushButton#syncButton {{
+                background: {COLORS["bg_panel"]};
+                color: {COLORS["chrome_mute"]};
+                border: 1px solid {COLORS["line"]};
+                padding: 7px 14px;
+                font-family: "JetBrains Mono", "Consolas", monospace;
+                font-size: 11px; font-weight: 700; letter-spacing: 2px;
+            }}
+            QPushButton#syncButton:hover {{ color: #ffffff; }}
+            QPushButton#syncButton:disabled {{ color: {COLORS["line"]}; }}
+        """)
+        self.sync_button.clicked.connect(self._on_sync_clicked)
+        header.addWidget(self.sync_button, 0, Qt.AlignmentFlag.AlignVCenter)
+
         self.active_badge = QLabel("IDLE")
         self._set_badge_idle()
         header.addWidget(self.active_badge, 0, Qt.AlignmentFlag.AlignVCenter)
 
         return header
+
+    # ─── MongoDB sync ──────────────────────────────────────────────
+
+    def _update_sync_label(self, text: str):
+        if hasattr(self, "sync_label"):
+            self.sync_label.setText(text)
+
+    def _on_sync_clicked(self):
+        if self.mongo_sync is None:
+            return
+        if not self.mongo_sync.is_configured:
+            QMessageBox.information(
+                self,
+                "CLOUD  SYNC",
+                "MongoDB is not configured.\n\n"
+                "Copy data/config.example.json → data/config.json\n"
+                "and fill in your mongodb_uri and user_id.",
+            )
+            return
+        self.mongo_sync.sync_async()
+
+    def _on_sync_started(self):
+        self._update_sync_label("CLOUD  //  SYNCING…")
+        if hasattr(self, "sync_button"):
+            self.sync_button.setEnabled(False)
+
+    def _on_sync_finished(self, success: bool, message: str):
+        if hasattr(self, "sync_button"):
+            self.sync_button.setEnabled(True)
+        uid = self.mongo_sync.user_id if self.mongo_sync else "?"
+        if success:
+            self._update_sync_label(
+                f"CLOUD  //  OK  ·  {message}  ·  user={uid}"
+            )
+        else:
+            short = message.splitlines()[0][:60]
+            self._update_sync_label(f"CLOUD  //  ERROR  ·  {short}")
+
+    def _on_cloud_data_updated(self):
+        """Pliki na dysku zostały nadpisane przez MongoSync – przeładuj."""
+        self.profile_manager.load()
+        self.scheduler.load()
+        self._refresh_profiles()
+        if hasattr(self, "schedule_widget"):
+            self.schedule_widget.refresh()
 
     def _set_badge_idle(self):
         self.active_badge.setText("STATUS  //  IDLE")
@@ -280,6 +382,7 @@ class MainWindow(QMainWindow):
                 actions=profile.actions,
                 blocked_sites=profile.blocked_sites,
                 is_active=(profile.name == active_name),
+                is_server=(profile.source == "server"),
             )
             card.switchClicked.connect(self._on_card_switch)
             card.editClicked.connect(self._on_card_edit)
@@ -306,6 +409,14 @@ class MainWindow(QMainWindow):
                 and self.profile_manager.active_profile.name == name):
             self._manual_deactivate()
         else:
+            if self.scheduler.active_block_is_server():
+                QMessageBox.information(
+                    self,
+                    "LOCKED  //  SERVER  SCHEDULE",
+                    "An active server schedule is enforcing the current profile.\n"
+                    "You cannot switch profiles manually right now.",
+                )
+                return
             profile = self.profile_manager.get_profile(name)
             if profile and not request_profile_password(
                 self, profile, "activate profile"
@@ -314,6 +425,14 @@ class MainWindow(QMainWindow):
             self.profile_manager.switch_profile(name, manual=True)
 
     def _manual_deactivate(self):
+        if self.scheduler.active_block_is_server():
+            QMessageBox.information(
+                self,
+                "LOCKED  //  SERVER  SCHEDULE",
+                "An active server schedule is enforcing the current profile.\n"
+                "You cannot deactivate it right now.",
+            )
+            return
         active = self.profile_manager.active_profile
         if active and not request_profile_password(
             self, active, "deactivate profile"

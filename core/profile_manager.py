@@ -47,6 +47,7 @@ class Profile:
     blocked_sites: list[str] = field(default_factory=list)
     locked: bool = False
     password_hash: str = ""
+    source: str = "local"   # "local" (edytowalny) lub "server" (forsowany przez bazę)
 
     def verify_password(self, password: str) -> bool:
         if not self.locked or not self.password_hash:
@@ -75,6 +76,7 @@ class Profile:
             d["locked"] = True
         if self.password_hash:
             d["password_hash"] = self.password_hash
+        d["source"] = self.source
         return d
 
     @classmethod
@@ -93,6 +95,7 @@ class Profile:
             blocked_sites=data.get("blocked_sites", []),
             locked=data.get("locked", False),
             password_hash=data.get("password_hash", ""),
+            source=data.get("source", "local"),
         )
 
 
@@ -218,6 +221,13 @@ class ProfileManager(QObject):
     def update_profile(self, old_name: str, updated: Profile) -> bool:
         for i, p in enumerate(self.profiles):
             if p.name == old_name:
+                if p.source == "server":
+                    logger.warning(
+                        f"Profil '{old_name}' pochodzi z serwera – edycja zablokowana"
+                    )
+                    return False
+                # Zachowaj źródło niezależnie od tego, co dostarczył edytor
+                updated.source = p.source
                 if old_name != updated.name:
                     self._delete_profile_file(old_name)
                     if self.active_profile and self.active_profile.name == old_name:
@@ -229,7 +239,13 @@ class ProfileManager(QObject):
                 return True
         return False
 
-    def delete_profile(self, name: str):
+    def delete_profile(self, name: str) -> bool:
+        existing = self.get_profile(name)
+        if existing and existing.source == "server":
+            logger.warning(
+                f"Profil '{name}' pochodzi z serwera – usunięcie zablokowane"
+            )
+            return False
         self._delete_profile_file(name)
         self.profiles = [p for p in self.profiles if p.name != name]
         if self.active_profile and self.active_profile.name == name:
@@ -238,6 +254,7 @@ class ProfileManager(QObject):
             self._previous_state = {}
         self._save_active()
         self.profilesUpdated.emit()
+        return True
 
     def get_profile(self, name: str) -> Optional[Profile]:
         for p in self.profiles:
@@ -327,7 +344,7 @@ class ProfileManager(QObject):
                 name="Praca",
                 icon="🏢",
                 color="#3b82f6",
-                description="Skup się na pracy – wyłącz rozpraszacze, ciemny motyw.",
+                description="Focus on work – block distractions, dark theme.",
                 actions=[
                     {"type": "set_theme", "dark": True},
                 ],
@@ -336,7 +353,7 @@ class ProfileManager(QObject):
                 name="Nauka",
                 icon="📚",
                 color="#10b981",
-                description="Tryb nauki – skupienie, jasny motyw.",
+                description="Study mode – focus, light theme.",
                 actions=[
                     {"type": "set_theme", "dark": False},
                 ],
@@ -345,7 +362,7 @@ class ProfileManager(QObject):
                 name="Rozrywka",
                 icon="🎬",
                 color="#f59e0b",
-                description="Czas na relaks – ciemny motyw.",
+                description="Time to unwind – dark theme.",
                 actions=[
                     {"type": "set_theme", "dark": True},
                 ],
