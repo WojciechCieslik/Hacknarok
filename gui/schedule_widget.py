@@ -458,6 +458,32 @@ class CalendarGrid(QWidget):
                         return False
         return True
 
+    def _check_overlap_password(self, day: int, slot_start: int, slot_end: int) -> bool:
+        """Dla każdego chronionego profilu nachodzącego na przedział – wymagaj hasła."""
+        h_start, m_start = _slot_to_hm(slot_start)
+        h_end, m_end = _slot_to_hm(slot_end)
+        start_m = h_start * 60 + m_start
+        end_m = h_end * 60 + m_end
+
+        checked: set[str] = set()
+        for b in self.scheduler.blocks:
+            if b.day != day:
+                continue
+            b_start = b.start_hour * 60 + b.start_min
+            b_end = b.end_hour * 60 + b.end_min
+            if b_start < end_m and b_end > start_m:
+                if b.profile_name in checked:
+                    continue
+                checked.add(b.profile_name)
+                profile = self.profile_manager.get_profile(b.profile_name)
+                if profile and profile.locked:
+                    if not request_profile_password(
+                        self, profile,
+                        f"nadpisać blok profilu '{profile.name}' w harmonogramie",
+                    ):
+                        return False
+        return True
+
 
 # ─── Główny widget harmonogramu ───────────────────────────────────────
 
