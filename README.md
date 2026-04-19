@@ -6,6 +6,19 @@ Self-enforcing daily planner — switch your environment between work, study, an
 
 ---
 
+## Screenshots
+
+![Profile list](assets/list_of_profiles.png)
+*Profile list — activate, edit or expand details*
+
+![Profile editor](assets/preset_of_profil.png)
+*Profile editor — theme, wallpaper, blocked apps, launch apps, site blocker*
+
+![Schedule](assets/schedule.png)
+*Weekly schedule — drag to assign a profile to a time slot*
+
+---
+
 ## Requirements
 
 - **Python 3.10+** (tested on 3.12)
@@ -147,6 +160,19 @@ extension/
 # Time Guard (PL)
 
 Samo-enforsujący się planer dnia — przełącz swoje środowisko między trybami pracy, nauki i rozrywki jednym kliknięciem. Profile automatycznie zmieniają tapetę, motyw systemu, blokują rozpraszające aplikacje i zamykają strony w przeglądarce.
+
+---
+
+## Zrzuty ekranu
+
+![Lista profili](assets/list_of_profiles.png)
+*Lista profili — aktywuj, edytuj lub rozwiń szczegóły*
+
+![Edytor profilu](assets/preset_of_profil.png)
+*Edytor profilu — motyw, tapeta, blokowane aplikacje, uruchamiane aplikacje, blokowanie stron*
+
+![Harmonogram](assets/schedule.png)
+*Harmonogram tygodniowy — przeciągnij aby przypisać profil do przedziału czasowego*
 
 ---
 
