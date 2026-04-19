@@ -7,7 +7,7 @@ następnie przypisz profil do tego przedziału.
 
 from datetime import datetime
 
-from PySide6.QtCore import Qt, Signal, QTimer
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import (
     QPainter, QColor, QPen, QFont, QCursor
 )

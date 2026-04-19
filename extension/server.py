@@ -19,7 +19,6 @@ import json
 import os
 import re
 import threading
-from datetime import datetime
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -244,36 +243,6 @@ def remove_blocked():
     print(f"[-] {active_name}: removed '{site}'")
     return jsonify({"ok": True, "site": site, "profile": active_name}), 200
 
-
-@app.route("/profiles", methods=["GET"])
-def list_profiles_endpoint():
-    with FILE_LOCK:
-        profiles = _list_profiles()
-    return jsonify({name: _profile_for_extension(p) for name, p in profiles.items()})
-
-
-@app.route("/active-profile", methods=["POST"])
-def set_active_profile():
-    body = request.get_json(silent=True) or {}
-    name = body.get("profile", "").strip()
-    if not name:
-        return jsonify({"error": "Missing 'profile' field"}), 400
-
-    with FILE_LOCK:
-        profiles = _list_profiles()
-        if name not in profiles:
-            return jsonify({"error": f"Profile '{name}' does not exist"}), 404
-        _write_active_name(name)
-        profile = profiles[name]
-
-    print(f"[→] Active profile: {name}")
-    return jsonify({"ok": True, "activeProfile": name,
-                    "profile": _profile_for_extension(profile)}), 200
-
-
-@app.route("/health", methods=["GET"])
-def health():
-    return jsonify({"ok": True, "time": datetime.now().isoformat()})
 
 
 # ---------------------------------------------------------------------------

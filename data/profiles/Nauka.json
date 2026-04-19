@@ -5,13 +5,8 @@
   "description": "Tryb nauki – skupienie, cisza, jasny motyw.",
   "actions": [
     {
-      "type": "set_volume",
-      "level": 20
-    },
-    {
       "type": "set_theme",
       "dark": false
     }
-  ],
-  "notifications_enabled": true
+  ]
 }
