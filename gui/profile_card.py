@@ -190,6 +190,8 @@ class ProfileCard(QFrame):
             act_btn = self._make_btn("ACTIVATE", color)
         act_btn.clicked.connect(lambda: self.switchClicked.emit(self.profile_name))
         btn_row.addWidget(act_btn)
+        if is_server:
+            act_btn.setEnabled(False)
 
         edit_btn = self._make_btn("EDIT", "#aab3d8")
         if is_server:
