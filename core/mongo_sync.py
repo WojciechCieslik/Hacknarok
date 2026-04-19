@@ -173,6 +173,12 @@ class MongoSync(QObject):
         )
 
     def _write_profiles(self, docs: list[dict]):
+        """
+        Merge: lokalne pliki (source != "server") pozostawiamy nietknięte.
+        Pliki z poprzedniej synchronizacji (source == "server"), których już
+        nie ma na serwerze, usuwamy. Nowe i zmienione zapisujemy z
+        source="server".
+        """
         os.makedirs(PROFILES_DIR, exist_ok=True)
 
         server_filenames = set()
@@ -187,6 +193,7 @@ class MongoSync(QObject):
                 "description": doc.get("description", ""),
                 "actions": doc.get("actions", []),
                 "blocked_sites": doc.get("blocked_sites", []),
+                "source": "server",
             }
             if doc.get("locked"):
                 out["locked"] = True
@@ -199,21 +206,45 @@ class MongoSync(QObject):
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(out, f, indent=2, ensure_ascii=False)
 
-        # Usuń lokalne pliki profili, których nie ma już na serwerze
-        if docs:
-            for existing in os.listdir(PROFILES_DIR):
-                if existing.endswith(".json") and existing not in server_filenames:
-                    try:
-                        os.remove(os.path.join(PROFILES_DIR, existing))
-                        logger.info(f"MongoSync: usunięto nieaktualny profil {existing}")
-                    except OSError as e:
-                        logger.error(f"Nie udało się usunąć {existing}: {e}")
+        # Usuń poprzednie pliki z serwera, których już nie ma w odpowiedzi.
+        # Lokalne (source != "server") zostawiamy.
+        for existing in os.listdir(PROFILES_DIR):
+            if not existing.endswith(".json") or existing in server_filenames:
+                continue
+            path = os.path.join(PROFILES_DIR, existing)
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except Exception:
+                continue
+            if data.get("source") == "server":
+                try:
+                    os.remove(path)
+                    logger.info(f"MongoSync: usunięto nieaktualny profil {existing}")
+                except OSError as e:
+                    logger.error(f"Nie udało się usunąć {existing}: {e}")
 
-    def _write_schedule(self, blocks: list[dict]):
+    def _write_schedule(self, server_blocks: list[dict]):
+        """
+        Merge: z SCHEDULE_FILE zachowujemy wszystkie bloki z source="local",
+        a wszystkie z source="server" zastępujemy świeżymi z serwera.
+        """
         os.makedirs(DATA_DIR, exist_ok=True)
-        cleaned = []
-        for b in blocks:
-            cleaned.append({
+
+        local_blocks: list[dict] = []
+        if os.path.exists(SCHEDULE_FILE):
+            try:
+                with open(SCHEDULE_FILE, "r", encoding="utf-8") as f:
+                    existing = json.load(f)
+                for b in existing.get("blocks", []):
+                    if b.get("source", "local") != "server":
+                        local_blocks.append(b)
+            except Exception as e:
+                logger.error(f"MongoSync: nie można wczytać SCHEDULE_FILE: {e}")
+
+        server_clean = []
+        for b in server_blocks:
+            server_clean.append({
                 "day": int(b.get("day", 0)),
                 "start_hour": int(b.get("start_hour", 0)),
                 "start_min": int(b.get("start_min", 0)),
@@ -221,6 +252,30 @@ class MongoSync(QObject):
                 "end_min": int(b.get("end_min", 0)),
                 "profile_name": b.get("profile_name", ""),
                 "enabled": bool(b.get("enabled", True)),
+                "source": "server",
             })
+
+        # Odrzuć lokalne bloki kolidujące z nowymi serwerowymi (serwer wygrywa).
+        def _overlap(lb: dict) -> bool:
+            l_start = int(lb.get("start_hour", 0)) * 60 + int(lb.get("start_min", 0))
+            l_end = int(lb.get("end_hour", 0)) * 60 + int(lb.get("end_min", 0))
+            for sb in server_clean:
+                if sb["day"] != lb.get("day"):
+                    continue
+                s_start = sb["start_hour"] * 60 + sb["start_min"]
+                s_end = sb["end_hour"] * 60 + sb["end_min"]
+                if s_start < l_end and s_end > l_start:
+                    return True
+            return False
+
+        kept_local = [b for b in local_blocks if not _overlap(b)]
+        dropped = len(local_blocks) - len(kept_local)
+        if dropped:
+            logger.info(
+                f"MongoSync: odrzucono {dropped} lokalny(ch) blok(ów) kolidujący"
+                f"(ch) z serwerem"
+            )
+
+        out = {"blocks": kept_local + server_clean}
         with open(SCHEDULE_FILE, "w", encoding="utf-8") as f:
-            json.dump({"blocks": cleaned}, f, indent=2, ensure_ascii=False)
+            json.dump(out, f, indent=2, ensure_ascii=False)

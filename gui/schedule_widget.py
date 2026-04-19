@@ -13,7 +13,8 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea,
-    QDialog, QComboBox, QPushButton, QFrame, QMenu, QSizePolicy
+    QDialog, QComboBox, QPushButton, QFrame, QMenu, QSizePolicy,
+    QMessageBox
 )
 
 from core.scheduler import Scheduler, ScheduleBlock, DAY_NAMES
@@ -134,14 +135,27 @@ class BlockAssignDialog(QDialog):
 
         h_start, m_start = _slot_to_hm(self._slot_start)
         h_end, m_end = _slot_to_hm(self._slot_end)
+        start_m = h_start * 60 + m_start
+        end_m = h_end * 60 + m_end
 
-        # Usuń nakładające się bloki tego samego dnia
+        # Bloki serwerowe są nienaruszalne – jeśli zakres je obejmuje,
+        # odrzuć całą operację (UI powinno to już wyłapać wcześniej).
+        if self._scheduler.server_overlap(self._day, start_m, end_m):
+            QMessageBox.warning(
+                self, "LOCKED",
+                "Ten zakres jest zajęty przez blok z serwera.\n"
+                "Nie możesz go nadpisać lokalnie.",
+            )
+            return
+
+        # Usuń nakładające się lokalne bloki tego samego dnia.
         self._scheduler.blocks = [
             b for b in self._scheduler.blocks
-            if not (
-                b.day == self._day
-                and b.start_hour * 60 + b.start_min < h_end * 60 + m_end
-                and b.end_hour * 60 + b.end_min > h_start * 60 + m_start
+            if b.source == "server"
+            or b.day != self._day
+            or not (
+                b.start_hour * 60 + b.start_min < end_m
+                and b.end_hour * 60 + b.end_min > start_m
             )
         ]
 
@@ -150,9 +164,15 @@ class BlockAssignDialog(QDialog):
             start_hour=h_start, start_min=m_start,
             end_hour=h_end, end_min=m_end,
             profile_name=profile_name,
+            source="local",
         )
-        self._scheduler.add_block(block)
-        self.accept()
+        if self._scheduler.add_block(block):
+            self.accept()
+        else:
+            QMessageBox.warning(
+                self, "CONFLICT",
+                "Nie udało się dodać bloku (kolizja z serwerem).",
+            )
 
 
 # ─── Siatka kalendarza ────────────────────────────────────────────────
@@ -295,8 +315,9 @@ class CalendarGrid(QWidget):
             bw = col_w - 4
             bh = (end_slot - start_slot) * SLOT_H - 2
 
+            is_server = getattr(block, "source", "local") == "server"
             color_hex = self._profile_colors.get(block.profile_name, "#5968ff")
-            fill = _hex_to_qcolor(color_hex, 150)
+            fill = _hex_to_qcolor(color_hex, 90 if is_server else 150)
             border = _hex_to_qcolor(color_hex, 240)
 
             painter.setBrush(fill)
@@ -305,15 +326,35 @@ class CalendarGrid(QWidget):
             # Left accent bar
             painter.fillRect(x, y, 3, bh - 1, border)
 
+            if is_server:
+                # Diagonalne kreski – wizualnie "zablokowany" blok.
+                painter.save()
+                painter.setClipRect(x, y, bw - 1, bh - 1)
+                stripe_pen = QPen(_hex_to_qcolor(color_hex, 60), 1)
+                painter.setPen(stripe_pen)
+                step = 8
+                for i in range(-bh, bw, step):
+                    painter.drawLine(x + i, y + bh, x + i + bh, y)
+                painter.restore()
+
             painter.setPen(QColor("#e8ecf5"))
             f = QFont("JetBrains Mono", 8)
             f.setBold(True)
             painter.setFont(f)
+            prefix = "🔒 " if is_server else ""
             painter.drawText(
                 x + 8, y + 2, bw - 10, bh - 4,
                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop,
-                block.profile_name.upper(),
+                (prefix + block.profile_name).upper(),
             )
+            if is_server:
+                painter.setPen(QColor("#7d8aff"))
+                painter.setFont(QFont("JetBrains Mono", 7))
+                painter.drawText(
+                    x + 8, y + 2, bw - 10, bh - 4,
+                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom,
+                    "CLOUD",
+                )
 
         # ── Zaznaczenie przeciągania ──
         if self._drag_start and self._drag_end and self._drag_day >= 0:
@@ -372,7 +413,20 @@ class CalendarGrid(QWidget):
         s1, s2 = self._drag_start[1], self._drag_end[1]
         slot_start = min(s1, s2)
         slot_end = max(s1, s2) + 1   # slot_end = pierwszy slot PO bloku
-        
+
+        # Serwer ma pierwszeństwo – nie pozwalamy nadpisywać jego bloków.
+        h_s, m_s = _slot_to_hm(slot_start)
+        h_e, m_e = _slot_to_hm(slot_end)
+        if self.scheduler.server_overlap(
+            self._drag_day, h_s * 60 + m_s, h_e * 60 + m_e
+        ):
+            QMessageBox.information(
+                self, "LOCKED",
+                "Ten przedział jest zajęty przez blok z serwera.\n"
+                "Nie możesz tu postawić lokalnego bloku.",
+            )
+            return
+
         # Jeśli przedział nachodzi na blok chronionego profilu – wymagaj hasła
         if self.profile_manager and not self._check_overlap_password(
             self._drag_day, slot_start, slot_end
@@ -414,7 +468,21 @@ class CalendarGrid(QWidget):
                 font-family: 'JetBrains Mono','Consolas',monospace;
                 font-size: 11px; letter-spacing: 1px; }
             QMenu::item:selected { background: #3a47d4; }
+            QMenu::item:disabled { color: #727aa3; }
         """)
+
+        if block.source == "server":
+            locked = menu.addAction(
+                f"🔒  LOCKED  //  {block.profile_name.upper()}"
+                f"   [ {block.start_str()} — {block.end_str()} ]"
+            )
+            locked.setEnabled(False)
+            menu.addSeparator()
+            info = menu.addAction("BLOCK  Z  SERWERA  –  nie można edytować")
+            info.setEnabled(False)
+            menu.exec(global_pos)
+            return
+
         del_act = menu.addAction(
             f"REMOVE  //  {block.profile_name.upper()}"
             f"   [ {block.start_str()} — {block.end_str()} ]"

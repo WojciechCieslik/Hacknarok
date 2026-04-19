@@ -28,7 +28,7 @@ class ScheduleBlock:
 
     def __init__(self, day: int, start_hour: int, start_min: int,
                  end_hour: int, end_min: int, profile_name: str,
-                 enabled: bool = True):
+                 enabled: bool = True, source: str = "local"):
         self.day = day
         self.start_hour = start_hour
         self.start_min = start_min
@@ -36,6 +36,7 @@ class ScheduleBlock:
         self.end_min = end_min
         self.profile_name = profile_name
         self.enabled = enabled
+        self.source = source   # "local" lub "server"
 
     def to_dict(self) -> dict:
         return {
@@ -46,6 +47,7 @@ class ScheduleBlock:
             "end_min": self.end_min,
             "profile_name": self.profile_name,
             "enabled": self.enabled,
+            "source": self.source,
         }
 
     @classmethod
@@ -58,7 +60,14 @@ class ScheduleBlock:
             end_min=data.get("end_min", 0),
             profile_name=data["profile_name"],
             enabled=data.get("enabled", True),
+            source=data.get("source", "local"),
         )
+
+    def start_minutes(self) -> int:
+        return self.start_hour * 60 + self.start_min
+
+    def end_minutes(self) -> int:
+        return self.end_hour * 60 + self.end_min
 
     def contains(self, weekday: int, hour: int, minute: int) -> bool:
         if weekday != self.day:
@@ -117,10 +126,23 @@ class Scheduler(QObject):
     def _find_current_block(self) -> ScheduleBlock | None:
         now = datetime.now()
         day, h, m = now.weekday(), now.hour, now.minute
+        # Server forsuje swój profil – ma pierwszeństwo nad lokalnym blokiem.
+        match = None
         for b in self.blocks:
             if b.enabled and b.contains(day, h, m):
-                return b
-        return None
+                if b.source == "server":
+                    return b
+                match = match or b
+        return match
+
+    def server_overlap(self, day: int, start_min: int, end_min: int) -> bool:
+        """True jeśli jakikolwiek blok z serwera nachodzi na podany przedział."""
+        for b in self.blocks:
+            if b.source != "server" or b.day != day:
+                continue
+            if b.start_minutes() < end_min and b.end_minutes() > start_min:
+                return True
+        return False
 
     def _check(self):
         current = self._find_current_block()
@@ -154,22 +176,40 @@ class Scheduler(QObject):
 
     # ─── CRUD ────────────────────────────────────────────────────
 
-    def add_block(self, block: ScheduleBlock):
+    def add_block(self, block: ScheduleBlock) -> bool:
+        if block.source == "local" and self.server_overlap(
+            block.day, block.start_minutes(), block.end_minutes()
+        ):
+            logger.warning(
+                f"Lokalny blok {block.day} {block.start_str()}-{block.end_str()} "
+                f"nakłada się na blok serwerowy – odrzucono"
+            )
+            return False
         self.blocks.append(block)
         self.save()
+        return True
 
-    def remove_block(self, index: int):
+    def remove_block(self, index: int) -> bool:
         if 0 <= index < len(self.blocks):
+            if self.blocks[index].source == "server":
+                logger.warning("Próba usunięcia bloku serwerowego – zablokowana")
+                return False
             self.blocks.pop(index)
             self.save()
+            return True
+        return False
 
     def clear_blocks_for_profile(self, profile_name: str):
-        self.blocks = [b for b in self.blocks if b.profile_name != profile_name]
+        # Nie usuwaj bloków serwerowych.
+        self.blocks = [
+            b for b in self.blocks
+            if b.profile_name != profile_name or b.source == "server"
+        ]
         self.save()
 
     def rename_profile_in_blocks(self, old_name: str, new_name: str):
         for b in self.blocks:
-            if b.profile_name == old_name:
+            if b.profile_name == old_name and b.source == "local":
                 b.profile_name = new_name
         self.save()
 

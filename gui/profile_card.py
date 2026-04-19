@@ -85,12 +85,14 @@ class ProfileCard(QFrame):
         actions: list[dict] = None,
         blocked_sites: list[str] = None,
         is_active: bool = False,
+        is_server: bool = False,
         parent=None,
     ):
         super().__init__(parent)
         self.profile_name = name
         self.profile_color = color
         self._is_active = is_active
+        self._is_server = is_server
         self._expanded = False
 
         self.setObjectName("activeCardFrame" if is_active else "cardFrame")
@@ -98,10 +100,10 @@ class ProfileCard(QFrame):
         self.setFixedHeight(self._COLLAPSED_H)
 
         self._setup_ui(name, icon, color, description, actions_count,
-                       actions or [], blocked_sites or [], is_active)
+                       actions or [], blocked_sites or [], is_active, is_server)
 
     def _setup_ui(self, name, icon, color, description, actions_count,
-                  actions, blocked_sites, is_active):
+                  actions, blocked_sites, is_active, is_server):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
@@ -154,6 +156,13 @@ class ProfileCard(QFrame):
                 "font-family: 'JetBrains Mono','Consolas',monospace;"
                 "letter-spacing: 2.5px; background: transparent;"
             )
+        elif is_server:
+            sub = QLabel("☁  CLOUD  //  LOCKED  //  SERVER  ENFORCED")
+            sub.setStyleSheet(
+                "color: #7d8aff; font-size: 10px; font-weight: 700;"
+                "font-family: 'JetBrains Mono','Consolas',monospace;"
+                "letter-spacing: 2.5px; background: transparent;"
+            )
         elif description:
             sub = QLabel(description)
             sub.setStyleSheet(
@@ -183,11 +192,19 @@ class ProfileCard(QFrame):
         btn_row.addWidget(act_btn)
 
         edit_btn = self._make_btn("EDIT", "#aab3d8")
-        edit_btn.clicked.connect(lambda: self.editClicked.emit(self.profile_name))
+        if is_server:
+            edit_btn.setEnabled(False)
+            edit_btn.setToolTip("Profil z serwera – edycja zablokowana")
+        else:
+            edit_btn.clicked.connect(lambda: self.editClicked.emit(self.profile_name))
         btn_row.addWidget(edit_btn)
 
         del_btn = self._make_btn("REMOVE", "#e5484d")
-        del_btn.clicked.connect(lambda: self.deleteClicked.emit(self.profile_name))
+        if is_server:
+            del_btn.setEnabled(False)
+            del_btn.setToolTip("Profil z serwera – usuwanie zablokowane")
+        else:
+            del_btn.clicked.connect(lambda: self.deleteClicked.emit(self.profile_name))
         btn_row.addWidget(del_btn)
 
         self._expand_btn = self._make_btn("v  SPEC", "#727aa3")
@@ -265,6 +282,11 @@ class ProfileCard(QFrame):
             }}
             QPushButton:pressed {{
                 background: {pressed_bg};
+            }}
+            QPushButton:disabled {{
+                color: rgba(170, 179, 216, 70);
+                border: 1px dashed rgba(170, 179, 216, 60);
+                background: transparent;
             }}
         """)
         return btn

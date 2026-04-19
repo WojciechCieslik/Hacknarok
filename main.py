@@ -35,11 +35,24 @@ def _start_extension_server():
         logger.error(f"Błąd serwera rozszerzenia: {e}")
 
 
+def _parse_mode(argv: list[str]) -> bool:
+    """Zwraca True dla trybu online, False dla offline. Default: offline."""
+    valid = {"online": True, "offline": False, "--online": True, "--offline": False}
+    for a in argv[1:]:
+        key = a.lower()
+        if key in valid:
+            return valid[key]
+    return False
+
+
 def main():
     from PySide6.QtWidgets import QApplication
     from PySide6.QtGui import QFont
     from gui.main_window import MainWindow
     from gui.styles import MAIN_STYLESHEET
+
+    online = _parse_mode(sys.argv)
+    logger.info(f"Tryb uruchomienia: {'ONLINE' if online else 'OFFLINE'}")
 
     app = QApplication(sys.argv)
     app.setApplicationName("Time Guard")
@@ -59,7 +72,7 @@ def main():
     logger.info("Serwer rozszerzenia uruchomiony na porcie 8765")
 
     # Główne okno
-    window = MainWindow()
+    window = MainWindow(online=online)
     window.show()
 
     logger.info("Time Guard started")

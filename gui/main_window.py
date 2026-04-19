@@ -31,9 +31,11 @@ _ICON_PATH = os.path.join(
 class MainWindow(QMainWindow):
     """Main window for Time Guard."""
 
-    def __init__(self):
+    def __init__(self, online: bool = False):
         super().__init__()
-        self.setWindowTitle("TIME GUARD")
+        self.online_mode = online
+        title = "TIME GUARD" + ("  //  ONLINE" if online else "  //  OFFLINE")
+        self.setWindowTitle(title)
         self.setMinimumSize(960, 720)
         self.resize(1080, 800)
         if os.path.exists(_ICON_PATH):
@@ -41,16 +43,17 @@ class MainWindow(QMainWindow):
 
         self.profile_manager = ProfileManager()
         self.scheduler = Scheduler()
-        self.mongo_sync = MongoSync(self)
+        self.mongo_sync = MongoSync(self) if online else None
 
         self.profile_manager.profileChanged.connect(self._on_profile_changed)
         self.profile_manager.profilesUpdated.connect(self._refresh_profiles)
         self.scheduler.scheduleTriggered.connect(self._on_schedule_trigger)
         self.scheduler.scheduleEnded.connect(self._on_schedule_end)
 
-        self.mongo_sync.syncStarted.connect(self._on_sync_started)
-        self.mongo_sync.syncFinished.connect(self._on_sync_finished)
-        self.mongo_sync.dataUpdated.connect(self._on_cloud_data_updated)
+        if self.mongo_sync is not None:
+            self.mongo_sync.syncStarted.connect(self._on_sync_started)
+            self.mongo_sync.syncFinished.connect(self._on_sync_finished)
+            self.mongo_sync.dataUpdated.connect(self._on_cloud_data_updated)
 
         self._block_timer = QTimer(self)
         self._block_timer.setInterval(5000)
@@ -62,11 +65,15 @@ class MainWindow(QMainWindow):
         self.scheduler.start()
         self._block_timer.start()
 
-        if self.mongo_sync.is_configured:
+        if self.mongo_sync is None:
+            self._update_sync_label("MODE  //  OFFLINE")
+            if hasattr(self, "sync_button"):
+                self.sync_button.hide()
+        elif self.mongo_sync.is_configured:
             self.mongo_sync.start_auto_sync()
         else:
             self._update_sync_label(
-                "CLOUD  //  OFFLINE  ·  edytuj  data/config.json"
+                "CLOUD  //  NO CONFIG  ·  edytuj  data/config.json"
             )
 
     def _setup_ui(self):
@@ -204,6 +211,8 @@ class MainWindow(QMainWindow):
             self.sync_label.setText(text)
 
     def _on_sync_clicked(self):
+        if self.mongo_sync is None:
+            return
         if not self.mongo_sync.is_configured:
             QMessageBox.information(
                 self,
@@ -223,9 +232,10 @@ class MainWindow(QMainWindow):
     def _on_sync_finished(self, success: bool, message: str):
         if hasattr(self, "sync_button"):
             self.sync_button.setEnabled(True)
+        uid = self.mongo_sync.user_id if self.mongo_sync else "?"
         if success:
             self._update_sync_label(
-                f"CLOUD  //  OK  ·  {message}  ·  user={self.mongo_sync.user_id}"
+                f"CLOUD  //  OK  ·  {message}  ·  user={uid}"
             )
         else:
             short = message.splitlines()[0][:60]
@@ -361,6 +371,7 @@ class MainWindow(QMainWindow):
                 actions=profile.actions,
                 blocked_sites=profile.blocked_sites,
                 is_active=(profile.name == active_name),
+                is_server=(profile.source == "server"),
             )
             card.switchClicked.connect(self._on_card_switch)
             card.editClicked.connect(self._on_card_edit)
