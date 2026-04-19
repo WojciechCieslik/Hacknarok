@@ -94,6 +94,7 @@ class ProfileEditorDialog(QDialog):
         self._editing = profile
         self._app_rows: list[tuple[QCheckBox, str, str]] = []
         self._site_rows: list[str] = []
+        self._launch_rows: list[dict] = []
 
         self._setup_ui(profile)
 
@@ -118,6 +119,7 @@ class ProfileEditorDialog(QDialog):
         cl.addWidget(self._section_theme(profile))
         cl.addWidget(self._section_wallpaper(profile))
         cl.addWidget(self._section_apps(profile))
+        cl.addWidget(self._section_launch(profile))
         cl.addWidget(self._section_websites(profile))
         cl.addWidget(self._section_password(profile))
         cl.addStretch()
@@ -470,6 +472,125 @@ class ProfileEditorDialog(QDialog):
             else:
                 cb.setVisible(True)
 
+    # ─── Sekcja: Uruchamiane aplikacje ──────────────────────────
+
+    def _section_launch(self, profile: Profile = None) -> QFrame:
+        frame, layout = self._make_section("APPS // LAUNCHED PROCESSES")
+
+        hint = QLabel(
+            "Aplikacje uruchomione automatycznie przy aktywacji profilu. "
+            "Zamknięcie ich w trakcie profilu nie dezaktywuje profilu."
+        )
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #64748b; font-size: 11px;")
+        layout.addWidget(hint)
+
+        self._launch_list_container = QWidget()
+        self._launch_list_layout = QVBoxLayout(self._launch_list_container)
+        self._launch_list_layout.setContentsMargins(0, 0, 0, 0)
+        self._launch_list_layout.setSpacing(4)
+        self._launch_list_layout.addStretch()
+
+        list_scroll = QScrollArea()
+        list_scroll.setWidgetResizable(True)
+        list_scroll.setFixedHeight(140)
+        list_scroll.setStyleSheet("""
+            QScrollArea { border: 1px solid #334155; border-radius: 8px; background: #0f172a; }
+        """)
+        list_scroll.setWidget(self._launch_list_container)
+        layout.addWidget(list_scroll)
+
+        self._launch_rows = []
+        if profile:
+            for a in profile.actions:
+                if a.get("type") == "launch_app":
+                    self._add_launch_row(a["path"], a.get("label", ""))
+
+        add_row = QHBoxLayout()
+        self._launch_path_edit = QLineEdit()
+        self._launch_path_edit.setPlaceholderText("wpisz / wklej ścieżkę do .exe lub użyj przycisku →")
+        self._launch_path_edit.setMinimumHeight(36)
+        add_row.addWidget(self._launch_path_edit, 1)
+
+        browse_btn = QPushButton("Przeglądaj")
+        browse_btn.setMinimumHeight(36)
+        browse_btn.clicked.connect(self._on_browse_launch)
+        add_row.addWidget(browse_btn)
+
+        add_btn = QPushButton("Dodaj")
+        add_btn.setMinimumHeight(36)
+        add_btn.clicked.connect(self._on_add_launch)
+        add_row.addWidget(add_btn)
+
+        layout.addLayout(add_row)
+        self._launch_path_edit.returnPressed.connect(self._on_add_launch)
+
+        return frame
+
+    def _add_launch_row(self, path: str, label: str = ""):
+        display = label or os.path.basename(path) or path
+        row = QWidget()
+        row.setObjectName("siteRow")
+        row.setFixedHeight(36)
+        row.setStyleSheet("""
+            QWidget#siteRow { background: #1e293b; border-radius: 8px; border: 1px solid #334155; }
+        """)
+        rl = QHBoxLayout(row)
+        rl.setContentsMargins(10, 0, 6, 0)
+        rl.setSpacing(8)
+
+        lbl = QLabel(display)
+        lbl.setToolTip(path)
+        lbl.setStyleSheet("color: #e2e8f0; font-size: 12px; background: transparent;")
+        rl.addWidget(lbl, 1)
+
+        del_btn = QPushButton("Usuń")
+        del_btn.setFixedHeight(28)
+        del_btn.setMinimumWidth(72)
+        del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        del_btn.setStyleSheet("""
+            QPushButton {
+                background: rgba(239,68,68,0.12); color: #fca5a5;
+                border: 1px solid rgba(239,68,68,0.35); border-radius: 6px;
+                padding: 2px 10px; font-size: 11px; font-weight: bold;
+            }
+            QPushButton:hover { background: #ef4444; color: #fff; border-color: #ef4444; }
+            QPushButton:pressed { background: #dc2626; }
+        """)
+
+        entry = {"path": path, "label": display}
+        del_btn.clicked.connect(lambda: self._remove_launch_row(entry, row))
+        rl.addWidget(del_btn)
+
+        idx = self._launch_list_layout.count() - 1
+        self._launch_list_layout.insertWidget(idx, row)
+        self._launch_rows.append(entry)
+
+    def _remove_launch_row(self, entry: dict, row_widget: QWidget):
+        if entry in self._launch_rows:
+            self._launch_rows.remove(entry)
+        row_widget.deleteLater()
+
+    def _on_browse_launch(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Wybierz aplikację", os.path.expanduser("~"), "Programy (*.exe)",
+        )
+        if path:
+            self._launch_path_edit.setText(path)
+
+    def _on_add_launch(self):
+        path = self._launch_path_edit.text().strip()
+        if not path:
+            self._on_browse_launch()
+            path = self._launch_path_edit.text().strip()
+        if not path or not path.lower().endswith(".exe"):
+            return
+        if any(e["path"].lower() == path.lower() for e in self._launch_rows):
+            self._launch_path_edit.clear()
+            return
+        self._add_launch_row(path)
+        self._launch_path_edit.clear()
+
     # ─── Sekcja: Zablokowane strony www ─────────────────────────
 
     def _section_websites(self, profile: Profile = None) -> QFrame:
@@ -688,9 +809,17 @@ class ProfileEditorDialog(QDialog):
                     "display_name": display_name,
                 })
 
-        # Zachowaj pozostałe akcje nie obsługiwane przez preset (np. launch_app)
+        for entry in self._launch_rows:
+            actions.append({
+                "type": "launch_app",
+                "path": entry["path"],
+                "label": entry["label"],
+                "args": [],
+            })
+
+        # Zachowaj inne nieznane typy akcji
         if self._editing:
-            preset_types = {"set_theme", "set_wallpaper", "block_process"}
+            preset_types = {"set_theme", "set_wallpaper", "block_process", "launch_app"}
             for a in self._editing.actions:
                 if a.get("type") not in preset_types:
                     actions.append(a)

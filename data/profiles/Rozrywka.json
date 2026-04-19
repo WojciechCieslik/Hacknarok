@@ -1,17 +1,25 @@
 {
   "name": "Rozrywka",
-  "icon": "🎬",
+  "icon": "WRK",
   "color": "#f59e0b",
-  "description": "Czas na relaks – głośna muzyka, ciemny motyw.",
+  "description": "",
   "actions": [
     {
-      "type": "set_volume",
-      "level": 80
+      "dark": true,
+      "type": "set_theme"
     },
     {
-      "type": "set_theme",
-      "dark": true
+      "args": [],
+      "label": "Spotify",
+      "path": "Spotify.exe",
+      "type": "launch_app"
+    },
+    {
+      "args": [],
+      "label": "msedge.exe",
+      "path": "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
+      "type": "launch_app"
     }
   ],
-  "notifications_enabled": true
+  "blocked_sites": []
 }
