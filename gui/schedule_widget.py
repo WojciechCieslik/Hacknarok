@@ -536,6 +536,10 @@ class WeeklyCalendarWidget(QWidget):
         target = max(0, y_now - viewport_h // 2)
         self._scroll.verticalScrollBar().setValue(target)
 
+    def refresh(self):
+        """Przerysuj siatkę – np. po synchronizacji harmonogramu z serwera."""
+        self._grid.update()
+
     def update_profile_names(self, names: list[str]):
         self._grid.profile_names = names
         self._grid.update()
