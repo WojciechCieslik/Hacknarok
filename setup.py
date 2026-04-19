@@ -9,8 +9,7 @@ Co robi:
   2. Uruchamia lokalną bazę MongoDB (przez Docker lub systemowe mongod)
   3. Tworzy data/config.json wskazujący na localhost
   4. Seeduje bazę przykładowymi danymi
-  5. Buduje dokumentację Sphinx (docs/_build/html/)
-  6. Wyświetla instrukcję instalacji rozszerzenia Chrome
+  5. Wyświetla instrukcję instalacji rozszerzenia Chrome
 """
 
 import json
@@ -28,7 +27,6 @@ SEED_SCRIPT = os.path.join(ROOT, "scripts", "seed_mongo.py")
 MONGO_URI = "mongodb://localhost:27017"
 MONGO_DB  = "timeguard"
 USER_ID   = "user_demo"
-DOCS_DIR  = os.path.join(ROOT, "docs")
 
 
 # ─── Kolory terminala ────────────────────────────────────────────
@@ -45,7 +43,7 @@ def step(n, total, msg):
 # ─── Zależności Python ───────────────────────────────────────────
 
 def ensure_dependencies():
-    step(1, 6, "Sprawdzam zależności Python...")
+    step(1, 5, "Sprawdzam zależności Python...")
     missing = []
     for pkg in ("pymongo", "flask", "flask_cors", "PySide6", "psutil"):
         try:
@@ -133,7 +131,7 @@ def _start_via_mongod() -> bool:
 
 
 def ensure_mongodb():
-    step(2, 6, "Sprawdzam MongoDB...")
+    step(2, 5, "Sprawdzam MongoDB...")
 
     if _mongo_is_running():
         print(green("  ✓ MongoDB już działa na localhost:27017"))
@@ -160,7 +158,7 @@ def ensure_mongodb():
 # ─── Konfiguracja ────────────────────────────────────────────────
 
 def write_config():
-    step(3, 6, "Tworzę konfigurację lokalną...")
+    step(3, 5, "Tworzę konfigurację lokalną...")
     os.makedirs(os.path.join(ROOT, "data"), exist_ok=True)
 
     if os.path.exists(CONFIG_PATH):
@@ -185,7 +183,7 @@ def write_config():
 # ─── Seed ────────────────────────────────────────────────────────
 
 def seed_database():
-    step(4, 6, "Seeduję bazę danych...")
+    step(4, 5, "Seeduję bazę danych...")
     if not os.path.exists(SEED_SCRIPT):
         print(yellow(f"  Brak {SEED_SCRIPT} – pomijam seedowanie"))
         return
@@ -202,53 +200,8 @@ def seed_database():
 
 # ─── Rozszerzenie Chrome ──────────────────────────────────────────
 
-def build_docs():
-    step(5, 6, "Buduję dokumentację Sphinx...")
-    if not os.path.exists(DOCS_DIR):
-        print(yellow("  Brak katalogu docs/ – pomijam"))
-        return
-
-    # Upewnij się, że sphinx i motyw są zainstalowane
-    sphinx_missing = []
-    for pkg in ("sphinx", "sphinx_rtd_theme"):
-        try:
-            __import__(pkg)
-        except ImportError:
-            sphinx_missing.append(pkg)
-
-    if sphinx_missing:
-        print(yellow(f"  Instaluję: {', '.join(sphinx_missing)}..."))
-        try:
-            subprocess.check_call(
-                [sys.executable, "-m", "pip", "install"] + sphinx_missing + ["--quiet"]
-            )
-        except subprocess.CalledProcessError:
-            print(yellow("  Nie udało się zainstalować Sphinx – pomijam dokumentację"))
-            return
-
-    build_dir = os.path.join(DOCS_DIR, "_build", "html")
-    result = subprocess.run(
-        [sys.executable, "-m", "sphinx", "-M", "html", DOCS_DIR, os.path.join(DOCS_DIR, "_build"), "-q"],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode == 0:
-        print(green(f"  ✓ Dokumentacja zbudowana → {build_dir}"))
-        print(f"  Otwórz: {bold(os.path.join(build_dir, 'index.html'))}")
-    else:
-        # Sphinx wypisuje ostrzeżenia na stderr; ignoruj niefatalne
-        lines = (result.stderr or result.stdout).strip().splitlines()
-        errors = [l for l in lines if "ERROR" in l or "Exception" in l]
-        if errors:
-            print(yellow(f"  Ostrzeżenia Sphinx (dokumentacja może być niekompletna):"))
-            for l in errors[:5]:
-                print(f"    {l}")
-        else:
-            print(green(f"  ✓ Dokumentacja zbudowana → {build_dir}"))
-
-
 def print_extension_instructions():
-    step(6, 6, "Rozszerzenie Chrome")
+    step(5, 5, "Rozszerzenie Chrome")
     ext_abs = os.path.abspath(EXTENSION_PATH)
 
     print(f"""
@@ -282,7 +235,6 @@ def main():
     ensure_mongodb()
     write_config()
     seed_database()
-    build_docs()
     print_extension_instructions()
 
     print(bold("─" * 45))
