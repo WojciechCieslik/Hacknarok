@@ -192,15 +192,15 @@ def seed(uri: str, db_name: str, drop: bool):
         sys.exit(1)
 
     db = client[db_name]
-    users_col    = db["users"]
-    profiles_col = db["profiles"]
-    schedules_col = db["schedules"]
+    users_col         = db["users"]
+    profiles_col      = db["profiles"]
+    user_schedules_col = db["user_schedules"]   # format wymagany przez MongoSync
 
     if drop:
         print("Czyszczę kolekcje...")
         users_col.drop()
         profiles_col.drop()
-        schedules_col.drop()
+        user_schedules_col.drop()
 
     now = datetime.now(timezone.utc)
 
@@ -213,6 +213,7 @@ def seed(uri: str, db_name: str, drop: bool):
     print(f"Użytkownicy: +{inserted_users} (łącznie {users_col.count_documents({})})")
 
     # ── Profile ──────────────────────────────────────────────────
+    # MongoSync robi profiles.find({user_id: ...}) – każdy profil ma user_id
     inserted_profiles = 0
     for user in USERS:
         uid = user["user_id"]
@@ -224,19 +225,21 @@ def seed(uri: str, db_name: str, drop: bool):
     print(f"Profile:     +{inserted_profiles} (łącznie {profiles_col.count_documents({})})")
 
     # ── Harmonogramy ─────────────────────────────────────────────
-    inserted_blocks = 0
+    # MongoSync czyta: user_schedules.find_one({"user_id": ...})
+    # i oczekuje dokumentu {user_id, blocks: [{day, start_hour, ...}, ...]}
+    upserted_schedules = 0
     for user in USERS:
         uid = user["user_id"]
-        existing = {
-            f"{b['day']}-{b['start_hour']}-{b['start_min']}-{b['profile_name']}"
-            for b in schedules_col.find({"user_id": uid}, {"day":1,"start_hour":1,"start_min":1,"profile_name":1,"_id":0})
-        }
-        for b in SCHEDULE_TEMPLATE:
-            key = f"{b['day']}-{b['start_hour']}-{b['start_min']}-{b['profile_name']}"
-            if key not in existing:
-                schedules_col.insert_one({"user_id": uid, **b, "created_at": now})
-                inserted_blocks += 1
-    print(f"Harmonogram: +{inserted_blocks} (łącznie {schedules_col.count_documents({})})")
+        blocks = [dict(b) for b in SCHEDULE_TEMPLATE]
+        result = user_schedules_col.update_one(
+            {"user_id": uid},
+            {"$set": {"user_id": uid, "blocks": blocks, "updated_at": now}},
+            upsert=True,
+        )
+        if result.upserted_id or result.modified_count:
+            upserted_schedules += 1
+    total_blocks = len(SCHEDULE_TEMPLATE) * len(USERS)
+    print(f"Harmonogram: {upserted_schedules} userów zapisanych ({total_blocks} bloków łącznie)")
 
     print("\nGotowe!")
     client.close()

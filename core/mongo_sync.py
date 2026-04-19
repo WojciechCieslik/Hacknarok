@@ -160,8 +160,8 @@ class MongoSync(QObject):
         sched_doc = db.user_schedules.find_one({"user_id": self.user_id})
         blocks = sched_doc.get("blocks", []) if sched_doc else []
 
-        # 2) Profile – pobierz wszystkie dokumenty z kolekcji profiles
-        profile_docs = list(db.profiles.find({}))
+        # 2) Profile użytkownika
+        profile_docs = list(db.profiles.find({"user_id": self.user_id}))
 
         # 3) Zapis na dysk
         self._write_profiles(profile_docs)
