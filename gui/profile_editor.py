@@ -526,7 +526,7 @@ class ProfileEditorDialog(QDialog):
     # ─── Sekcja: Ochrona hasłem ─────────────────────────────────
 
     def _section_password(self, profile: Profile = None) -> QFrame:
-        frame, layout = self._make_section("🔒  PASSWORD  //  SECURITY")
+        frame, layout = self._make_section("PASSWORD  //  SECURITY")
 
         hint = QLabel(
             "A password-protected profile requires the password to edit it, "

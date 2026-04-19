@@ -32,7 +32,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("TIME GUARD // PRO")
+        self.setWindowTitle("TIME GUARD")
         self.setMinimumSize(960, 720)
         self.resize(1080, 800)
         if os.path.exists(_ICON_PATH):
@@ -137,7 +137,7 @@ class MainWindow(QMainWindow):
         title_col = QVBoxLayout()
         title_col.setSpacing(4)
 
-        title = QLabel("TIME  GUARD")
+        title = QLabel("TIMEGUARD")
         title.setObjectName("titleLabel")
         title_col.addWidget(title)
 
