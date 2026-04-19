@@ -89,15 +89,53 @@ class SystemController:
     # ─── Procesy / Aplikacje ────────────────────────────────────
 
     @staticmethod
+    def _resolve_exe(path: str) -> str | None:
+        """Rozwiąż nazwę exe na pełną ścieżkę przez PATH i rejestr App Paths."""
+        import shutil
+        import winreg
+
+        if os.path.isabs(path) and os.path.isfile(path):
+            return path
+
+        found = shutil.which(path)
+        if found:
+            return found
+
+        exe_name = os.path.basename(path)
+        reg_key = r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\\" + exe_name
+        for hive in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
+            try:
+                with winreg.OpenKey(hive, reg_key) as k:
+                    reg_path, _ = winreg.QueryValueEx(k, "")
+                    if reg_path and os.path.isfile(reg_path):
+                        return reg_path
+            except OSError:
+                pass
+
+        return None
+
+    @staticmethod
     def launch_app(path: str, args: list[str] = None) -> bool:
-        """Uruchom aplikację."""
+        """Uruchom aplikację. Rozwiązuje nazwę exe przez PATH i rejestr."""
+        resolved = SystemController._resolve_exe(path)
+        if resolved:
+            try:
+                subprocess.Popen(
+                    [resolved] + (args or []),
+                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS,
+                )
+                logger.info(f"Uruchomiono: {resolved}")
+                return True
+            except Exception as e:
+                logger.error(f"Nie udało się uruchomić {resolved}: {e}")
+
+        # Fallback: ShellExecute przez shell=True (używa rejestru App Paths)
         try:
-            cmd = [path] + (args or [])
             subprocess.Popen(
-                cmd,
-                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+                path if not args else f'"{path}" ' + " ".join(args),
+                shell=True,
             )
-            logger.info(f"Uruchomiono: {path}")
+            logger.info(f"Uruchomiono (shell): {path}")
             return True
         except Exception as e:
             logger.error(f"Nie udało się uruchomić {path}: {e}")
@@ -237,7 +275,15 @@ class SystemController:
                     key = name.lower()
                     if key not in seen:
                         seen.add(key)
-                        apps.append({"process_name": name, "display_name": title})
+                        try:
+                            exe_path = proc.exe()
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            exe_path = name
+                        apps.append({
+                            "process_name": name,
+                            "display_name": title,
+                            "exe_path": exe_path,
+                        })
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     pass
 
