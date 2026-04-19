@@ -5,6 +5,7 @@ Każdy profil przechowywany jest jako oddzielny plik JSON w data/profiles/.
 Aktywny profil zapamiętywany jest w data/active.json.
 """
 
+import hashlib
 import json
 import os
 import re
@@ -46,6 +47,11 @@ class Profile:
     blocked_sites: list[str] = field(default_factory=list)
     locked: bool = False
     password_hash: str = ""
+
+    def verify_password(self, password: str) -> bool:
+        if not self.locked or not self.password_hash:
+            return True
+        return hashlib.sha256(password.encode()).hexdigest() == self.password_hash
 
     def get_actions(self) -> list[Action]:
         result = []

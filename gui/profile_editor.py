@@ -118,6 +118,7 @@ class ProfileEditorDialog(QDialog):
         cl.addWidget(self._section_wallpaper(profile))
         cl.addWidget(self._section_apps(profile))
         cl.addWidget(self._section_websites(profile))
+        cl.addWidget(self._section_password(profile))
         cl.addStretch()
 
         scroll.setWidget(content)
@@ -519,12 +520,23 @@ class ProfileEditorDialog(QDialog):
         self._site_input.returnPressed.connect(self._on_add_site)
 
         # Zabezpieczenie hasłem
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet("QFrame { color: #2a3372; margin: 4px 0; }")
-        layout.addWidget(sep)
+        return frame
 
-        self.lock_cb = QCheckBox("Lock profile with password (extension cannot edit)")
+    # ─── Sekcja: Ochrona hasłem ─────────────────────────────────
+
+    def _section_password(self, profile: Profile = None) -> QFrame:
+        frame, layout = self._make_section("🔒  Ochrona hasłem")
+
+        hint = QLabel(
+            "Profil chroniony hasłem wymaga jego podania aby edytować profil, "
+            "dodać/usunąć go z harmonogramu, lub zmienić listę blokowanych stron "
+            "w rozszerzeniu przeglądarki."
+        )
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #64748b; font-size: 11px;")
+        layout.addWidget(hint)
+
+        self.lock_cb = QCheckBox("Włącz ochronę hasłem")
         self.lock_cb.setChecked(profile.locked if profile else False)
         self.lock_cb.stateChanged.connect(lambda s: self._lock_widget.setVisible(bool(s)))
         layout.addWidget(self.lock_cb)
@@ -536,7 +548,12 @@ class ProfileEditorDialog(QDialog):
 
         self._password_edit = QLineEdit()
         self._password_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self._password_edit.setPlaceholderText("new password (leave blank to keep current)")
+        placeholder = (
+            "Nowe hasło (zostaw puste by zachować aktualne)"
+            if profile and profile.password_hash
+            else "Ustaw hasło..."
+        )
+        self._password_edit.setPlaceholderText(placeholder)
         self._password_edit.setMinimumHeight(36)
         ll.addRow("PASSWORD:", self._password_edit)
 

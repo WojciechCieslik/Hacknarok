@@ -8,6 +8,9 @@
 const API = "http://localhost:8765";
 const $ = (id) => document.getElementById(id);
 
+// Hasło odblokowania (tylko w pamięci popupa, przepada po zamknięciu)
+let unlockPassword = "";
+let currentProfileName = "";
 // ---------- Komunikacja z serwerem ----------------------------------------
 async function fetchState() {
   const res = await fetch(`${API}/state`, { cache: "no-store" });
@@ -19,7 +22,7 @@ async function addSite(site) {
   const res = await fetch(`${API}/blocked`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ site })
+    body: JSON.stringify({ site, password: unlockPassword })
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || "HTTP " + res.status);
@@ -30,7 +33,7 @@ async function removeSite(site) {
   const res = await fetch(`${API}/blocked`, {
     method: "DELETE",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ site })
+    body: JSON.stringify({ site, password: unlockPassword })
   });
   if (!res.ok) throw new Error("HTTP " + res.status);
   return res.json();
@@ -91,14 +94,22 @@ async function render() {
 
     const locked = !!(state.profile && state.profile.locked);
 
+    // Jeśli zmienił się profil – wyczyść wpisane wcześniej hasło
+    if (state.activeProfile !== currentProfileName) {
+      currentProfileName = state.activeProfile;
+      unlockPassword = "";
+    }
+    const unlocked = !locked || unlockPassword !== "";
+
     badge.textContent = (locked ? "🔒 " : "") + (state.activeProfile || "—");
     if (state.profile && state.profile.color) {
       badge.style.background = state.profile.color;
     }
 
-    $("lock-notice").hidden = !locked;
-    $("site-input").disabled = locked;
-    $("add-btn").disabled = locked;
+    $("lock-notice").hidden = !locked || unlocked;
+    $("unlock-box").hidden = !locked || unlocked;
+    $("site-input").disabled = !unlocked;
+    $("add-btn").disabled = !unlocked;
 
     const sites = (state.profile && state.profile.blockedSites) || [];
     title.textContent = `Zablokowane (${sites.length})`;
@@ -120,7 +131,7 @@ async function render() {
 
       li.appendChild(span);
 
-      if (!locked) {
+      if (unlocked) {
         const btn = document.createElement("button");
         btn.className = "del-btn";
         btn.textContent = "Usuń";
@@ -173,6 +184,40 @@ $("add-btn").addEventListener("click", async () => {
 
 $("site-input").addEventListener("keypress", (e) => {
   if (e.key === "Enter") $("add-btn").click();
+});
+
+// Odblokowanie hasłem – zweryfikuj przez próbę usunięcia nieistniejącej strony
+$("unlock-btn").addEventListener("click", async () => {
+  const pw = $("password-input").value;
+  if (!pw) return;
+  try {
+    const res = await fetch(`${API}/blocked`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        site: "__verify__.context-switcher-pro.invalid",
+        password: pw,
+      }),
+    });
+    if (res.status === 403) {
+      showStatus("Nieprawidłowe hasło", "error");
+      return;
+    }
+    if (!res.ok) {
+      showStatus("Błąd weryfikacji hasła", "error");
+      return;
+    }
+    unlockPassword = pw;
+    $("password-input").value = "";
+    showStatus("Odblokowano", "success");
+    await render();
+  } catch (e) {
+    showStatus("Błąd: " + e.message, "error");
+  }
+});
+
+$("password-input").addEventListener("keypress", (e) => {
+  if (e.key === "Enter") $("unlock-btn").click();
 });
 
 $("list-toggle").addEventListener("click", () => {
