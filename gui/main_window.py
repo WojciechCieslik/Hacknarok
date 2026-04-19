@@ -45,6 +45,17 @@ class MainWindow(QMainWindow):
         self.scheduler = Scheduler()
         self.mongo_sync = MongoSync(self) if online else None
 
+        if not online:
+            # Tryb offline: usuń z pamięci wszystko co pochodzi z serwera.
+            # Pliki na dysku pozostają – przy kolejnym uruchomieniu online
+            # zostaną odtworzone / nadpisane przez MongoSync.
+            self.profile_manager.profiles = [
+                p for p in self.profile_manager.profiles if p.source != "server"
+            ]
+            self.scheduler.blocks = [
+                b for b in self.scheduler.blocks if b.source != "server"
+            ]
+
         self.profile_manager.profileChanged.connect(self._on_profile_changed)
         self.profile_manager.profilesUpdated.connect(self._refresh_profiles)
         self.scheduler.scheduleTriggered.connect(self._on_schedule_trigger)
@@ -217,9 +228,9 @@ class MainWindow(QMainWindow):
             QMessageBox.information(
                 self,
                 "CLOUD  SYNC",
-                "Brak konfiguracji MongoDB.\n\n"
-                "Skopiuj data/config.example.json → data/config.json\n"
-                "i wstaw tam swój mongodb_uri oraz user_id.",
+                "MongoDB is not configured.\n\n"
+                "Copy data/config.example.json → data/config.json\n"
+                "and fill in your mongodb_uri and user_id.",
             )
             return
         self.mongo_sync.sync_async()
@@ -398,6 +409,14 @@ class MainWindow(QMainWindow):
                 and self.profile_manager.active_profile.name == name):
             self._manual_deactivate()
         else:
+            if self.scheduler.active_block_is_server():
+                QMessageBox.information(
+                    self,
+                    "LOCKED  //  SERVER  SCHEDULE",
+                    "An active server schedule is enforcing the current profile.\n"
+                    "You cannot switch profiles manually right now.",
+                )
+                return
             profile = self.profile_manager.get_profile(name)
             if profile and not request_profile_password(
                 self, profile, "activate profile"
@@ -406,6 +425,14 @@ class MainWindow(QMainWindow):
             self.profile_manager.switch_profile(name, manual=True)
 
     def _manual_deactivate(self):
+        if self.scheduler.active_block_is_server():
+            QMessageBox.information(
+                self,
+                "LOCKED  //  SERVER  SCHEDULE",
+                "An active server schedule is enforcing the current profile.\n"
+                "You cannot deactivate it right now.",
+            )
+            return
         active = self.profile_manager.active_profile
         if active and not request_profile_password(
             self, active, "deactivate profile"

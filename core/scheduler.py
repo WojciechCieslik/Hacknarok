@@ -19,8 +19,8 @@ logger = logging.getLogger(__name__)
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
 SCHEDULE_FILE = os.path.join(DATA_DIR, "schedule.json")
 
-DAY_NAMES = ["Pon", "Wt", "Śr", "Czw", "Pt", "Sob", "Ndz"]
-DAY_NAMES_FULL = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"]
+DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+DAY_NAMES_FULL = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 
 class ScheduleBlock:
@@ -113,12 +113,25 @@ class Scheduler(QObject):
     def stop(self):
         self._timer.stop()
 
+    def active_block_is_server(self) -> bool:
+        """Zwraca True jeśli aktualnie aktywny blok pochodzi z serwera."""
+        current = self._find_current_block()
+        return current is not None and getattr(current, "source", "local") == "server"
+
     def notify_manual_deactivation(self):
         """
         Wywołaj gdy użytkownik ręcznie przerywa profil.
-        Aktualnie aktywny blok nie zostanie ponownie uruchomiony.
+        Aktualnie aktywny blok nie zostanie ponownie uruchomiony –
+        chyba że pochodzi z serwera: wtedy jest ignorowany (serwer wymusza).
         """
         if self._active_block_key:
+            current = self._find_current_block()
+            if current and getattr(current, "source", "local") == "server":
+                logger.info(
+                    f"Harmonogram: blok serwerowy '{self._active_block_key}' "
+                    f"nie może być pominięty"
+                )
+                return
             self._skipped_block_keys.add(self._active_block_key)
             logger.info(f"Harmonogram: blok '{self._active_block_key}' pominięty do końca okresu")
             self._active_block_key = ""

@@ -129,7 +129,7 @@ class BlockAssignDialog(QDialog):
         if self._profile_manager:
             profile = self._profile_manager.get_profile(profile_name)
             if profile and not request_profile_password(
-                self, profile, f"dodać profil '{profile.name}' do harmonogramu"
+                self, profile, f"add profile '{profile.name}' to the schedule"
             ):
                 return
 
@@ -143,8 +143,8 @@ class BlockAssignDialog(QDialog):
         if self._scheduler.server_overlap(self._day, start_m, end_m):
             QMessageBox.warning(
                 self, "LOCKED",
-                "Ten zakres jest zajęty przez blok z serwera.\n"
-                "Nie możesz go nadpisać lokalnie.",
+                "This time range is occupied by a server block.\n"
+                "You cannot overwrite it locally.",
             )
             return
 
@@ -171,7 +171,7 @@ class BlockAssignDialog(QDialog):
         else:
             QMessageBox.warning(
                 self, "CONFLICT",
-                "Nie udało się dodać bloku (kolizja z serwerem).",
+                "Could not add block — conflicts with a server block.",
             )
 
 
@@ -422,8 +422,8 @@ class CalendarGrid(QWidget):
         ):
             QMessageBox.information(
                 self, "LOCKED",
-                "Ten przedział jest zajęty przez blok z serwera.\n"
-                "Nie możesz tu postawić lokalnego bloku.",
+                "This range is occupied by a server block.\n"
+                "You cannot place a local block here.",
             )
             return
 
@@ -478,7 +478,7 @@ class CalendarGrid(QWidget):
             )
             locked.setEnabled(False)
             menu.addSeparator()
-            info = menu.addAction("BLOCK  Z  SERWERA  –  nie można edytować")
+            info = menu.addAction("SERVER  BLOCK  –  read-only")
             info.setEnabled(False)
             menu.exec(global_pos)
             return
@@ -494,7 +494,7 @@ class CalendarGrid(QWidget):
                 if self.profile_manager else None
             )
             if profile and not request_profile_password(
-                self, profile, "usunąć blok z harmonogramu"
+                self, profile, "remove this block from the schedule"
             ):
                 return
             self.scheduler.remove_block(block_idx)
@@ -521,7 +521,7 @@ class CalendarGrid(QWidget):
                 if profile and profile.locked:
                     if not request_profile_password(
                         self, profile,
-                        f"nadpisać blok profilu '{profile.name}' w harmonogramie",
+                        f"overwrite a block belonging to profile '{profile.name}'",
                     ):
                         return False
         return True
@@ -547,7 +547,7 @@ class CalendarGrid(QWidget):
                 if profile and profile.locked:
                     if not request_profile_password(
                         self, profile,
-                        f"nadpisać blok profilu '{profile.name}' w harmonogramie",
+                        f"overwrite a block belonging to profile '{profile.name}'",
                     ):
                         return False
         return True

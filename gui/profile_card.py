@@ -196,7 +196,7 @@ class ProfileCard(QFrame):
         edit_btn = self._make_btn("EDIT", "#aab3d8")
         if is_server:
             edit_btn.setEnabled(False)
-            edit_btn.setToolTip("Profil z serwera – edycja zablokowana")
+            edit_btn.setToolTip("Server profile – editing is locked")
         else:
             edit_btn.clicked.connect(lambda: self.editClicked.emit(self.profile_name))
         btn_row.addWidget(edit_btn)
@@ -204,7 +204,7 @@ class ProfileCard(QFrame):
         del_btn = self._make_btn("REMOVE", "#e5484d")
         if is_server:
             del_btn.setEnabled(False)
-            del_btn.setToolTip("Profil z serwera – usuwanie zablokowane")
+            del_btn.setToolTip("Server profile – removal is locked")
         else:
             del_btn.clicked.connect(lambda: self.deleteClicked.emit(self.profile_name))
         btn_row.addWidget(del_btn)

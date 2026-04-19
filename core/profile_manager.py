@@ -344,7 +344,7 @@ class ProfileManager(QObject):
                 name="Praca",
                 icon="🏢",
                 color="#3b82f6",
-                description="Skup się na pracy – wyłącz rozpraszacze, ciemny motyw.",
+                description="Focus on work – block distractions, dark theme.",
                 actions=[
                     {"type": "set_theme", "dark": True},
                 ],
@@ -353,7 +353,7 @@ class ProfileManager(QObject):
                 name="Nauka",
                 icon="📚",
                 color="#10b981",
-                description="Tryb nauki – skupienie, jasny motyw.",
+                description="Study mode – focus, light theme.",
                 actions=[
                     {"type": "set_theme", "dark": False},
                 ],
@@ -362,7 +362,7 @@ class ProfileManager(QObject):
                 name="Rozrywka",
                 icon="🎬",
                 color="#f59e0b",
-                description="Czas na relaks – ciemny motyw.",
+                description="Time to unwind – dark theme.",
                 actions=[
                     {"type": "set_theme", "dark": True},
                 ],
